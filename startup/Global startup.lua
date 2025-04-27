@@ -16,7 +16,7 @@ local function main()
 	background.run(
 		vzoom.update_track_height_lock_indicators,
 		print_update_track_height_lock_indicators_error,
-		true
+		false
 	)
 end
 

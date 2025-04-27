@@ -25,7 +25,7 @@ function main()
 	while found do
 		found, _, _, start_ppqpos, end_ppqpos, _, _, _ = reaper.MIDI_GetNote(take, i)
 		if not found then break end -- No more notes
-		
+
 		-- Check if note is under the mouse position (within note's start and end time)
 		if start_ppqpos <= mouse_ppqpos and mouse_ppqpos <= end_ppqpos then
 			-- Select the note

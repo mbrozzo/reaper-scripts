@@ -1,4 +1,4 @@
-local script_path = debug.getinfo (1, 'S').source:match[[^@?(.*[\/])[^\/]-$]]
+local script_path = debug.getinfo(1, 'S').source:match [[^@?(.*[\/])[^\/]-$]]
 package.path = script_path .. 'modules/?.lua;' .. package.path;
 local vzoom = require("vzoom")
 

@@ -104,7 +104,7 @@ function main()
 		if item_track == nil then goto continue end
 		local item_track_number = reaper.GetMediaTrackInfo_Value(item_track, "IP_TRACKNUMBER")
 		local item_lane = reaper.GetMediaItemInfo_Value(item, "I_FIXEDLANE")
-		
+
 		local tracklane_key = generate_string_key(item_track_number, item_lane)
 
 		-- Handle fadeinable items
@@ -156,7 +156,7 @@ function main()
 				table.insert(fadeinable_items_by_tracklane[tracklane_key], item_data)
 			end
 		end
-		
+
 		if item_fadeoutable then
 			-- Add item data to fadeoutable items by track and lane
 			if fadeoutable_items_in_tracklane == nil then
@@ -169,7 +169,7 @@ function main()
 
 		::continue::
 	end
-	
+
 	-- Fade remaining items
 	for tracklane, fadeinable_items_in_tracklane in pairs(fadeinable_items_by_tracklane) do
 		for i, item_data in pairs(fadeinable_items_in_tracklane) do

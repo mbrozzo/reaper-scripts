@@ -1,15 +1,12 @@
+local script_path = debug.getinfo(1, 'S').source:match [[^@?(.*[\/])[^\/]-$]]
+package.path = script_path .. '../modules/?.lua;' .. package.path;
+local reautils = require("reautils")
+
 local background = {}
 
--- Set ToolBar Button State
-local function set_button_state(set)
-	local is_new_value, filename, sec, cmd, mode, resolution, val = reaper.get_action_context()
-	reaper.SetToggleCommandState(sec, cmd, set or 0)
-	reaper.RefreshToolbar2(sec, cmd)
-end
-
-function background.run(main_function, atexit_function)
+function background.run(main_function, atexit_function, update_button_state)
 	if not main_function then return end
-	set_button_state(1)
+	if update_button_state then reautils.set_button_state(1) end
 	local main = function ()
 		main_function()
 		reaper.defer(main)
@@ -19,7 +16,7 @@ function background.run(main_function, atexit_function)
 		if atexit_function then
 			atexit_function()
 		end
-		set_button_state(0)
+		if update_button_state then reautils.set_button_state(0) end
 	end)
 end
 

@@ -159,4 +159,31 @@ function vzoom.zoom_vertically_preserving_track_heights(
 	reaper.TrackList_AdjustWindows(true)
 end
 
+function vzoom.set_track_height_lock_indicator(track, lock_state)
+	local success, track_name = reaper.GetSetMediaTrackInfo_String(track, "P_NAME", "", false)
+	if not success then
+		return
+	end
+	if lock_state == 0 then
+		if track_name:find("^🔒 ") then
+			reaper.GetSetMediaTrackInfo_String(track, "P_NAME", track_name:gsub("^🔒 ", ""), true)
+		end
+	else
+		if not track_name:find("^🔒 ") then
+			reaper.GetSetMediaTrackInfo_String(track, "P_NAME", "🔒 " .. track_name, true)
+		end
+	end
+end
+
+function vzoom.update_track_height_lock_indicators()
+	local track = reaper.GetMasterTrack(0)
+	local lock_state = reaper.GetMediaTrackInfo_Value(track, "B_HEIGHTLOCK")
+	vzoom.set_track_height_lock_indicator(track, lock_state)
+	for i = 0, reaper.CountTracks(0) - 1 do
+		track = reaper.GetTrack(0, i)
+		lock_state = reaper.GetMediaTrackInfo_Value(track, "B_HEIGHTLOCK")
+		vzoom.set_track_height_lock_indicator(track, lock_state)
+	end
+end
+
 return vzoom

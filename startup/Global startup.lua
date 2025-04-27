@@ -14,7 +14,7 @@ end
 local function main()
 	reaper.Main_OnCommand(ENABLE_RELATIVE_GRID_SNAP_COMMAND, 0)
 	background.loop(
-		vzoom.update_track_height_lock_indicators(),
+		vzoom.update_track_height_lock_indicators,
 		print_update_track_height_lock_indicators_error,
 		false
 	)

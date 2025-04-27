@@ -5,7 +5,7 @@ local vzoom = require("vzoom")
 
 ENABLE_RELATIVE_GRID_SNAP_COMMAND = 41052
 
-local function print_update_track_height_lock_indicators_error(message)
+local function print_update_track_height_lock_indicators_error()
 	reaper.ShowConsoleMsg(
 		"Error: the script to update track height lock indicators exited unexpectedly\n"
 	)

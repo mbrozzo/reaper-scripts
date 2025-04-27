@@ -1,5 +1,5 @@
 local script_path = debug.getinfo (1, 'S').source:match[[^@?(.*[\/])[^\/]-$]]
-package.path = script_path .. 'modules/?.lua;' .. package.path;
+package.path = script_path .. '../modules/?.lua;' .. package.path;
 local background = require("background")
 
 local function set_track_height_lock_indicator(track, lock_state)

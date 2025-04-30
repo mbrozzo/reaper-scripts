@@ -3,7 +3,9 @@ package.path = script_path .. '../modules/?.lua;' .. package.path;
 local vzoom = require("vzoom")
 
 function main()
-	vzoom.zoom_vertically_preserving_track_heights(1.1, 0)
+	vzoom.zoom_proportionally(function()
+		reaper.Main_OnCommand(vzoom.ZOOM_IN_COMMAND_ID, 0)
+	end)
 end
 
 reaper.defer(main)

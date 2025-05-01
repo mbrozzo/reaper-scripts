@@ -17,7 +17,7 @@ local function main()
 		vzoom.zoom_proportionally(function()
 			if rotate > 0 then
 				reaper.SNM_SetDoubleConfigVar("vzoom3",
-				math.min(reaper.SNM_GetDoubleConfigVar("vzoom3", -1) + 1, vzoom.MAX_VZOOM))
+				math.min(reaper.SNM_GetDoubleConfigVar("vzoom3", -1) + 1, vzoom.get_max_vzoom()))
 			else
 				reaper.SNM_SetDoubleConfigVar("vzoom3", math.max(reaper.SNM_GetDoubleConfigVar("vzoom3", -1) - 1, 0))
 			end

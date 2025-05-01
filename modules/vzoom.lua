@@ -46,6 +46,30 @@ function vzoom.estimate_track_height(vzoom3)
 	return h_max
 end
 
+function vzoom.estimate_vzoom3(track_height)
+	local _, collapsed, small, recarm = reaper.NF_GetThemeDefaultTCPHeights()
+	local h_max = vzoom.get_current_max_track_height()
+	local h_30 = luautils.round(recarm + (h_max - recarm) * 0.4636)
+	if track_height < small then
+		return 2 / (small - collapsed) * (track_height - collapsed)
+	end
+	if track_height < recarm then
+		return 2 + 2 / (recarm - small) * (track_height - small)
+	end
+	if track_height < h_30 then
+		return 4 + 26 / (h_30 - recarm) * (track_height - recarm)
+	end
+	if track_height < h_max then
+		return 30 + 10 / (h_max - h_30) * (track_height - h_30)
+	end
+	return vzoom.MAX_VZOOM
+end
+
+function vzoom.get_max_vzoom()
+	return vzoom.estimate_vzoom3(vzoom.get_current_max_track_height() *
+		reaper.SNM_GetDoubleConfigVar("maxvzoom", 1))
+end
+
 function vzoom.execute_keeping_vzoom_and_track_heights(func, ...)
 	-- Store vzoom3 value
 	local vzoom3 = reaper.SNM_GetDoubleConfigVar("vzoom3", -1)

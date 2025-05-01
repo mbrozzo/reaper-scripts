@@ -91,8 +91,11 @@ function vzoom.zoom_proportionally(change_zoom, ...)
 
 	-- Set all track height overrides to 0
 	-- This is needed to avoid other track heights being set to the tallest track
-	for _, track in pairs(tracks) do
-		reaper.SetMediaTrackInfo_Value(track, "I_HEIGHTOVERRIDE", 0)
+	if not luautils.only_contains_value(overrides, 0) then
+		for _, track in pairs(tracks) do
+			reaper.SetMediaTrackInfo_Value(track, "I_HEIGHTOVERRIDE", 0)
+		end
+		reaper.TrackList_AdjustWindows(false)
 	end
 
 	-- Execute the change zoom function

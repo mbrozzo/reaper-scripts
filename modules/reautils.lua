@@ -7,6 +7,20 @@ function reautils.set_button_state(state)
 	reaper.RefreshToolbar2(sec, cmd)
 end
 
+function reautils.get_all_tracks(include_master)
+	include_master = include_master or false
+	local tracks = {}
+	if include_master then
+		local master_track = reaper.GetMasterTrack(0)
+		table.insert(tracks, master_track)
+	end
+	for i = 0, reaper.CountTracks(0) - 1 do
+		local track = reaper.GetTrack(0, i)
+		table.insert(tracks, track)
+	end
+	return tracks
+end
+
 -- TODO: ricontrolla
 -- function reautils.SetEnvHeight(envelope, laneHeight)
 -- 	local BR_env = reaper.BR_EnvAlloc(envelope, false)

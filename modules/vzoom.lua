@@ -1,10 +1,15 @@
+local script_path = debug.getinfo(1, 'S').source:match [[^@?(.*[\/])[^\/]-$]]
+package.path = script_path .. '?.lua;' .. package.path;
+local luautils = require("luautils")
+local reautils = require("reautils")
+
 local vzoom = {}
 
-vzoom.MAX_VZOOM = 40 -- Maximum zoom level
+vzoom.MAX_VZOOM = 40                     -- Maximum zoom level
 vzoom.MINIMIZE_TOGGLE_COMMAND_ID = 40110 -- Command ID for toggling track height to minimum
 vzoom.MAXIMIZE_TOGGLE_COMMAND_ID = 40113 -- Command ID for toggling track height to maximum
-vzoom.ZOOM_IN_COMMAND_ID = 40111 -- Command ID for zooming in
-vzoom.ZOOM_OUT_COMMAND_ID = 40112 -- Command ID for zooming out
+vzoom.ZOOM_IN_COMMAND_ID = 40111         -- Command ID for zooming in
+vzoom.ZOOM_OUT_COMMAND_ID = 40112        -- Command ID for zooming out
 
 function vzoom.execute_keeping_vzoom_and_track_heights(func, ...)
 	-- Store vzoom3 value
@@ -14,41 +19,32 @@ function vzoom.execute_keeping_vzoom_and_track_heights(func, ...)
 		return
 	end
 
-	-- Lock track heights, and save lock and override states
-	local master_track = reaper.GetMasterTrack(0)
-	local master_track_lock = reaper.GetMediaTrackInfo_Value(master_track, "B_HEIGHTLOCK")
-	local master_track_override = reaper.GetMediaTrackInfo_Value(master_track, "I_HEIGHTOVERRIDE")
-	reaper.SetMediaTrackInfo_Value(master_track, "I_HEIGHTOVERRIDE",
-		reaper.GetMediaTrackInfo_Value(master_track, "I_TCPH"))
-	reaper.SetMediaTrackInfo_Value(master_track, "B_HEIGHTLOCK", 1)
-	local n_tracks = reaper.CountTracks(0)
-	if n_tracks < 0 then return end
-	local locks = {}
-	local overrides = {}
-	for i = 0, n_tracks - 1 do
-		local track = reaper.GetTrack(0, i)
-		locks[i] = reaper.GetMediaTrackInfo_Value(track, "B_HEIGHTLOCK")
-		overrides[i] = reaper.GetMediaTrackInfo_Value(track, "I_HEIGHTOVERRIDE")
+	-- Save lock and override states
+	local tracks = reautils.get_all_tracks(true)
+	local locks = luautils.map(tracks, function(track)
+		return reaper.GetMediaTrackInfo_Value(track, "B_HEIGHTLOCK")
+	end)
+	local overrides = luautils.map(tracks, function(track)
+		return reaper.GetMediaTrackInfo_Value(track, "I_HEIGHTOVERRIDE")
+	end)
+
+	-- Lock track heights
+	for _, track in ipairs(tracks) do
 		reaper.SetMediaTrackInfo_Value(track, "I_HEIGHTOVERRIDE",
 			reaper.GetMediaTrackInfo_Value(track, "I_TCPH"))
 		reaper.SetMediaTrackInfo_Value(track, "B_HEIGHTLOCK", 1)
 	end
 
+	-- Execute function
 	local retvals = { func(...) }
 
 	-- Restore vzoom3 value
 	reaper.SNM_SetDoubleConfigVar("vzoom3", vzoom3)
 
-	-- Restore track locks
-	reaper.SetMediaTrackInfo_Value(reaper.GetMasterTrack(0), "B_HEIGHTLOCK", master_track_lock)
-	for i = 0, n_tracks - 1 do
-		reaper.SetMediaTrackInfo_Value(reaper.GetTrack(0, i), "B_HEIGHTLOCK", locks[i])
-	end
-
-	-- Restore track height overrides
-	reaper.SetMediaTrackInfo_Value(reaper.GetMasterTrack(0), "I_HEIGHTOVERRIDE", master_track_override)
-	for i = 0, n_tracks - 1 do
-		reaper.SetMediaTrackInfo_Value(reaper.GetTrack(0, i), "I_HEIGHTOVERRIDE", overrides[i])
+	-- Restore track height locks and overrides
+	for i, track in ipairs(tracks) do
+		reaper.SetMediaTrackInfo_Value(track, "B_HEIGHTLOCK", locks[i])
+		reaper.SetMediaTrackInfo_Value(track, "I_HEIGHTOVERRIDE", overrides[i])
 	end
 
 	reaper.TrackList_AdjustWindows(false)
@@ -58,50 +54,68 @@ end
 
 function vzoom.zoom_proportionally(change_zoom, ...)
 	-- Save lock and override states
-	local master_track = reaper.GetMasterTrack(0)
-	local master_track_lock = reaper.GetMediaTrackInfo_Value(master_track, "B_HEIGHTLOCK")
-	local master_track_override = reaper.GetMediaTrackInfo_Value(master_track, "I_HEIGHTOVERRIDE")
-	local n_tracks = reaper.CountTracks(0)
-	if n_tracks < 0 then return end
-	local locks = {}
-	local overrides = {}
-	for i = 0, n_tracks - 1 do
-		local track = reaper.GetTrack(0, i)
-		locks[i] = reaper.GetMediaTrackInfo_Value(track, "B_HEIGHTLOCK")
-		overrides[i] = reaper.GetMediaTrackInfo_Value(track, "I_HEIGHTOVERRIDE")
+	local tracks = reautils.get_all_tracks(true)
+	local locks = luautils.map(tracks, function(track)
+		return reaper.GetMediaTrackInfo_Value(track, "B_HEIGHTLOCK")
+	end)
+	local overrides = luautils.map(tracks, function(track)
+		return reaper.GetMediaTrackInfo_Value(track, "I_HEIGHTOVERRIDE")
+	end)
+	-- If all overrides are 0 or locked, just call the function
+	if luautils.all(overrides, function(override, i)
+			return override == 0 or (override ~= 0 and locks[i] == 1)
+		end) then
+		return change_zoom(...)
+	end
+	-- else
+
+	-- Search for an unlocked track without height override, excluding the master track
+	local measured_track = nil
+	for i, override in pairs(overrides) do
+		if override == 0 and locks[i] == 0 and i > 1 then
+			measured_track = tracks[i]
+			break
+		end
+	end
+	-- If no unlocked track without height overrides found, add one at the end
+	local was_new_track_added = false
+	if measured_track == nil then
+		local n_tracks = reaper.GetNumTracks()
+		reaper.InsertTrackInProject(0, n_tracks, 0)
+		measured_track = reaper.GetTrack(0, n_tracks)
+		was_new_track_added = true
 	end
 
-	-- Insert a new track at the bottom of the track control panel
-	reaper.InsertTrackInProject(0, n_tracks, 0)
-	local track = reaper.GetTrack(0, n_tracks)
-
 	-- Get track height and save it
-	local old_h = reaper.GetMediaTrackInfo_Value(track, "I_TCPH")
+	local old_h = reaper.GetMediaTrackInfo_Value(measured_track, "I_TCPH")
 
+	-- Set all track height overrides to 0
+	-- This is needed to avoid other track heights being set to the tallest track
+	for _, track in pairs(tracks) do
+		reaper.SetMediaTrackInfo_Value(track, "I_HEIGHTOVERRIDE", 0)
+	end
+
+	-- Execute the change zoom function
 	local retvals = { change_zoom(...) }
 
 	-- Get track height and save it
-	local new_h = reaper.GetMediaTrackInfo_Value(track, "I_TCPH")
+	local new_h = reaper.GetMediaTrackInfo_Value(measured_track, "I_TCPH")
 
-	-- Delete the new track
-	reaper.DeleteTrack(track)
+	-- If a new track was added, delete it
+	if was_new_track_added then
+		reaper.DeleteTrack(measured_track)
+	end
 
 	-- Calculate height ratio
 	local ratio = new_h / old_h
 
-	-- Restore track height overrides
-	if master_track_override ~= 0 then
-		if master_track_lock ~= 0 then
-			master_track_override = master_track_override * ratio
-		end
-		reaper.SetMediaTrackInfo_Value(reaper.GetMasterTrack(0), "I_HEIGHTOVERRIDE", master_track_override)
-	end
-	for i = 0, n_tracks - 1 do
+	-- Update track height overrides
+	for i, track in pairs(tracks) do
 		if overrides[i] ~= 0 then
-			if locks[i] ~= 0 then
+			if locks[i] == 0 then
 				overrides[i] = overrides[i] * ratio
 			end
-			reaper.SetMediaTrackInfo_Value(reaper.GetTrack(0, i), "I_HEIGHTOVERRIDE", overrides[i])
+			reaper.SetMediaTrackInfo_Value(track, "I_HEIGHTOVERRIDE", overrides[i])
 		end
 	end
 

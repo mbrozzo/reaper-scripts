@@ -184,7 +184,7 @@ function vzoom.update_track_height_lock_indicators()
 	end
 end
 
-function vzoom.handle_tcp_ctrl_mousewheel_zoom(callback)
+function vzoom.handle_tcp_ctrl_mousewheel(callback)
 	callback = callback or function() end
 	local tcp = reaper.JS_Window_FindEx(reaper.GetMainHwnd(), nil, "REAPERTCPDisplay", "")
 	if reaper.JS_WindowMessage_Intercept(tcp, "WM_MOUSEWHEEL", false) ~= 1 then

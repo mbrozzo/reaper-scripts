@@ -32,15 +32,17 @@ function vzoom.estimate_track_height(vzoom3)
 	local h_30 = luautils.round(recarm + (h_max - recarm) * 0.4636)
 	if vzoom3 < 2 then
 		return luautils.round(collapsed + (small - collapsed) / 2 * vzoom3)
-	elseif vzoom3 < 4 then
-		return luautils.round(small + (recarm - small) / 2 * (vzoom3 - 2))
-	elseif vzoom3 < 30 then
-		return luautils.round(recarm + (h_30 - recarm) / 2 * (vzoom3 - 4))
-	elseif vzoom3 < 40 then
-		return luautils.round(h_30 + (h_max - h_30) / 2 * (vzoom3 - 30))
-	else
-		return h_max
 	end
+	if vzoom3 < 4 then
+		return luautils.round(small + (recarm - small) / 2 * (vzoom3 - 2))
+	end
+	if vzoom3 < 30 then
+		return luautils.round(recarm + (h_30 - recarm) / 26 * (vzoom3 - 4))
+	end
+	if vzoom3 < 40 then
+		return luautils.round(h_30 + (h_max - h_30) / 10 * (vzoom3 - 30))
+	end
+	return h_max
 end
 
 function vzoom.execute_keeping_vzoom_and_track_heights(func, ...)
@@ -97,42 +99,20 @@ function vzoom.zoom_proportionally(change_zoom, ...)
 	if luautils.all(overrides, function(override, i)
 			return override == 0 or (override ~= 0 and locks[i] == 1)
 		end) then
-		return change_zoom(...)
+		local retvals = { change_zoom(...) }
+		reaper.TrackList_AdjustWindows(false)
+		return retvals
 	end
 	-- else
-	reaper.ShowConsoleMsg("not all overrides are 0 or locked\n")
 
-	-- Search for an unlocked track without height override, excluding the master track
-	local measured_track = nil
-	for i, override in pairs(overrides) do
-		if override == 0 and locks[i] == 0 and i > 1 then
-			measured_track = tracks[i]
-			break
-		end
-	end
-	-- If no unlocked track without height overrides found, add one at the end
-	local was_new_track_added = false
-	if measured_track == nil then
-		local n_tracks = reaper.GetNumTracks()
-		reaper.InsertTrackInProject(0, n_tracks, 0)
-		measured_track = reaper.GetTrack(0, n_tracks)
-		was_new_track_added = true
-		reaper.ShowConsoleMsg("New track added\n")
-	end
-
-	-- Get track height and save it
-	local old_h = reaper.GetMediaTrackInfo_Value(measured_track, "I_TCPH")
+	-- Estimate track height and save it
+	local old_h = vzoom.estimate_track_height(reaper.SNM_GetDoubleConfigVar("vzoom3", -1))
 
 	-- Execute the change zoom function
 	local retvals = { change_zoom(...) }
 
-	-- Get track height and save it
-	local new_h = reaper.GetMediaTrackInfo_Value(measured_track, "I_TCPH")
-
-	-- If a new track was added, delete it
-	if was_new_track_added then
-		reaper.DeleteTrack(measured_track)
-	end
+	-- Estimate track height and save it
+	local new_h = vzoom.estimate_track_height(reaper.SNM_GetDoubleConfigVar("vzoom3", -1))
 
 	-- Calculate height ratio
 	local ratio = new_h / old_h
@@ -141,7 +121,7 @@ function vzoom.zoom_proportionally(change_zoom, ...)
 	for i, track in pairs(tracks) do
 		if overrides[i] ~= 0 then
 			if locks[i] == 0 then
-				overrides[i] = overrides[i] * ratio
+				overrides[i] = math.max(luautils.round(overrides[i] * ratio), 1)
 			end
 			reaper.SetMediaTrackInfo_Value(track, "I_HEIGHTOVERRIDE", overrides[i])
 		end

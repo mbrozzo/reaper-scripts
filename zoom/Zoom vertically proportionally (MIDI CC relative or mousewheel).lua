@@ -12,7 +12,6 @@ function main()
 		else
 			reaper.SNM_SetDoubleConfigVar("vzoom3", math.max(reaper.SNM_GetDoubleConfigVar("vzoom3", -1) - 1, 0))
 		end
-		reaper.TrackList_AdjustWindows(true)
 	end)
 end
 

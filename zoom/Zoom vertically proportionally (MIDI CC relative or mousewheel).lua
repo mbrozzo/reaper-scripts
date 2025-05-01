@@ -6,14 +6,13 @@ function main()
 	local is_new_value, filename, sectionID, cmdID, mode, resolution, val = reaper.get_action_context()
 	if (mode <= 0 or val == 0) then return end
 
-	local command_id
-	if val > 0 then
-		command_id = vzoom.ZOOM_IN_COMMAND_ID
-	else
-		command_id = vzoom.ZOOM_OUT_COMMAND_ID
-	end
 	vzoom.zoom_proportionally(function()
-		reaper.Main_OnCommand(command_id, 0)
+		if val > 0 then
+			reaper.SNM_SetDoubleConfigVar("vzoom3", math.min(reaper.SNM_GetDoubleConfigVar("vzoom3", -1) + 1, vzoom.MAX_VZOOM))
+		else
+			reaper.SNM_SetDoubleConfigVar("vzoom3", math.max(reaper.SNM_GetDoubleConfigVar("vzoom3", -1) - 1, 0))
+		end
+		reaper.TrackList_AdjustWindows(true)
 	end)
 end
 

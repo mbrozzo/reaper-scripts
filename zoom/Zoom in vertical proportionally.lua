@@ -4,7 +4,8 @@ local vzoom = require("vzoom")
 
 function main()
 	vzoom.zoom_proportionally(function()
-		reaper.Main_OnCommand(vzoom.ZOOM_IN_COMMAND_ID, 0)
+		reaper.SNM_SetDoubleConfigVar("vzoom3", math.min(reaper.SNM_GetDoubleConfigVar("vzoom3", -1) + 1, vzoom.MAX_VZOOM))
+		reaper.TrackList_AdjustWindows(true)
 	end)
 end
 

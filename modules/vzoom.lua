@@ -68,6 +68,7 @@ function vzoom.zoom_proportionally(change_zoom, ...)
 		return change_zoom(...)
 	end
 	-- else
+	reaper.ShowConsoleMsg("not all overrides are 0 or locked\n")
 
 	-- Search for an unlocked track without height override, excluding the master track
 	local measured_track = nil
@@ -84,19 +85,20 @@ function vzoom.zoom_proportionally(change_zoom, ...)
 		reaper.InsertTrackInProject(0, n_tracks, 0)
 		measured_track = reaper.GetTrack(0, n_tracks)
 		was_new_track_added = true
+		reaper.ShowConsoleMsg("New track added\n")
 	end
 
 	-- Get track height and save it
 	local old_h = reaper.GetMediaTrackInfo_Value(measured_track, "I_TCPH")
 
-	-- Set all track height overrides to 0
-	-- This is needed to avoid other track heights being set to the tallest track
-	if not luautils.only_contains_value(overrides, 0) then
-		for _, track in pairs(tracks) do
-			reaper.SetMediaTrackInfo_Value(track, "I_HEIGHTOVERRIDE", 0)
-		end
-		reaper.TrackList_AdjustWindows(false)
-	end
+	-- -- Set all track height overrides to 0
+	-- -- This is needed to avoid other track heights being set to the tallest track
+	-- if not luautils.only_contains_value(overrides, 0) then
+	-- 	for _, track in pairs(tracks) do
+	-- 		reaper.SetMediaTrackInfo_Value(track, "I_HEIGHTOVERRIDE", 0)
+	-- 	end
+	-- 	reaper.TrackList_AdjustWindows(false)
+	-- end
 
 	-- Execute the change zoom function
 	local retvals = { change_zoom(...) }
@@ -167,13 +169,20 @@ function vzoom.set_track_height_lock_indicator(track, lock_state)
 	end
 	if lock_state == 0 then
 		if track_name:find("^🔒 ") then
-			reaper.GetSetMediaTrackInfo_String(track, "P_NAME", track_name:gsub("^🔒 ", ""), true)
+			track_name = track_name:gsub("^🔒 ", "")
+		end
+		if not track_name:find("^🔓 ") then
+			track_name = "🔓 " .. track_name
 		end
 	else
+		if track_name:find("^🔓 ") then
+			track_name = track_name:gsub("^🔓 ", "")
+		end
 		if not track_name:find("^🔒 ") then
-			reaper.GetSetMediaTrackInfo_String(track, "P_NAME", "🔒 " .. track_name, true)
+			track_name = "🔒 " .. track_name
 		end
 	end
+	reaper.GetSetMediaTrackInfo_String(track, "P_NAME", track_name, true)
 end
 
 function vzoom.update_track_height_lock_indicators()

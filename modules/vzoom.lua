@@ -11,6 +11,21 @@ vzoom.MAXIMIZE_TOGGLE_COMMAND_ID = 40113 -- Command ID for toggling track height
 vzoom.ZOOM_IN_COMMAND_ID = 40111         -- Command ID for zooming in
 vzoom.ZOOM_OUT_COMMAND_ID = 40112        -- Command ID for zooming out
 
+function vzoom.get_current_min_track_height()
+	local supercollapsed, collapsed, small, recarm = reaper.NF_GetThemeDefaultTCPHeights()
+	return collapsed
+end
+
+function vzoom.get_arrange_view_height()
+	arrange_view_hwnd = reaper.JS_Window_FindChild(reaper.GetMainHwnd(), "trackview", true)
+	ret, left, top, right, bottom = reaper.JS_Window_GetClientRect(arrange_view_hwnd)
+	return bottom - top
+end
+
+-- Aliases for get_arrange_view_height
+vzoom.get_tcp_height = vzoom.get_arrange_view_height
+vzoom.get_current_max_track_height = vzoom.get_arrange_view_height
+
 function vzoom.estimate_track_height(vzoom3)
 	local supercollapsed, collapsed, small, recarm = reaper.NF_GetThemeDefaultTCPHeights()
 	local h_max = vzoom.get_current_max_track_height()
@@ -108,15 +123,6 @@ function vzoom.zoom_proportionally(change_zoom, ...)
 	-- Get track height and save it
 	local old_h = reaper.GetMediaTrackInfo_Value(measured_track, "I_TCPH")
 
-	-- -- Set all track height overrides to 0
-	-- -- This is needed to avoid other track heights being set to the tallest track
-	-- if not luautils.only_contains_value(overrides, 0) then
-	-- 	for _, track in pairs(tracks) do
-	-- 		reaper.SetMediaTrackInfo_Value(track, "I_HEIGHTOVERRIDE", 0)
-	-- 	end
-	-- 	reaper.TrackList_AdjustWindows(false)
-	-- end
-
 	-- Execute the change zoom function
 	local retvals = { change_zoom(...) }
 
@@ -145,21 +151,6 @@ function vzoom.zoom_proportionally(change_zoom, ...)
 
 	return table.unpack(retvals)
 end
-
-function vzoom.get_current_min_track_height()
-	local supercollapsed, collapsed, small, recarm = reaper.NF_GetThemeDefaultTCPHeights()
-	return collapsed
-end
-
-function vzoom.get_current_max_track_height()
-	arrange_view_hwnd = reaper.JS_Window_FindChild(reaper.GetMainHwnd(), "trackview", true)
-	ret, left, top, right, bottom = reaper.JS_Window_GetClientRect(arrange_view_hwnd)
-	return bottom - top
-end
-
--- Aliases for get_max_track_h
-vzoom.get_tcp_height = vzoom.get_current_max_track_height
-vzoom.get_arrange_view_height = vzoom.get_current_max_track_height
 
 
 function vzoom.set_track_height_lock_indicator(track, lock_state)

@@ -11,6 +11,23 @@ vzoom.MAXIMIZE_TOGGLE_COMMAND_ID = 40113 -- Command ID for toggling track height
 vzoom.ZOOM_IN_COMMAND_ID = 40111         -- Command ID for zooming in
 vzoom.ZOOM_OUT_COMMAND_ID = 40112        -- Command ID for zooming out
 
+function vzoom.estimate_track_height(vzoom3)
+	local supercollapsed, collapsed, small, recarm = reaper.NF_GetThemeDefaultTCPHeights()
+	local h_max = vzoom.get_current_max_track_height()
+	local h_30 = luautils.round(recarm + (h_max - recarm) * 0.4636)
+	if vzoom3 < 2 then
+		return luautils.round(collapsed + (small - collapsed) / 2 * vzoom3)
+	elseif vzoom3 < 4 then
+		return luautils.round(small + (recarm - small) / 2 * (vzoom3 - 2))
+	elseif vzoom3 < 30 then
+		return luautils.round(recarm + (h_30 - recarm) / 2 * (vzoom3 - 4))
+	elseif vzoom3 < 40 then
+		return luautils.round(h_30 + (h_max - h_30) / 2 * (vzoom3 - 30))
+	else
+		return h_max
+	end
+end
+
 function vzoom.execute_keeping_vzoom_and_track_heights(func, ...)
 	-- Store vzoom3 value
 	local vzoom3 = reaper.SNM_GetDoubleConfigVar("vzoom3", -1)
@@ -135,26 +152,9 @@ function vzoom.get_current_min_track_height()
 end
 
 function vzoom.get_current_max_track_height()
-	return vzoom.execute_keeping_vzoom_and_track_heights(function()
-		-- Get the number of tracks
-		local n_tracks = reaper.GetNumTracks()
-
-		-- Insert a new track at the bottom of the track control panel
-		reaper.InsertTrackAtIndex(n_tracks, false)
-		local track = reaper.GetTrack(0, n_tracks)
-
-		-- Set maximum zoom
-		reaper.SNM_SetDoubleConfigVar("vzoom3", vzoom.MAX_VZOOM)
-		reaper.TrackList_AdjustWindows(true)
-
-		-- Get track height and save it
-		local h = reaper.GetMediaTrackInfo_Value(track, "I_TCPH")
-
-		-- Delete the new track
-		reaper.DeleteTrack(track)
-
-		return h
-	end)
+	arrange_view_hwnd = reaper.JS_Window_FindChild(reaper.GetMainHwnd(), "trackview", true)
+	ret, left, top, right, bottom = reaper.JS_Window_GetClientRect(arrange_view_hwnd)
+	return bottom - top
 end
 
 -- Aliases for get_max_track_h

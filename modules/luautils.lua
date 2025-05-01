@@ -1,5 +1,9 @@
 local luautils = {}
 
+function luautils.round(x)
+	return math.floor(x + 0.5)
+end
+
 function luautils.map(table, func)
 	local retvals = {}
 	for k, v in ipairs(table) do

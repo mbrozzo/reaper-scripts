@@ -12,13 +12,13 @@ vzoom.ZOOM_IN_COMMAND_ID = 40111         -- Command ID for zooming in
 vzoom.ZOOM_OUT_COMMAND_ID = 40112        -- Command ID for zooming out
 
 function vzoom.get_current_min_track_height()
-	local supercollapsed, collapsed, small, recarm = reaper.NF_GetThemeDefaultTCPHeights()
+	local _, collapsed, _, _ = reaper.NF_GetThemeDefaultTCPHeights()
 	return collapsed
 end
 
 function vzoom.get_arrange_view_height()
-	arrange_view_hwnd = reaper.JS_Window_FindChild(reaper.GetMainHwnd(), "trackview", true)
-	ret, left, top, right, bottom = reaper.JS_Window_GetClientRect(arrange_view_hwnd)
+	local arrange_view_hwnd = reaper.JS_Window_FindChild(reaper.GetMainHwnd(), "trackview", true)
+	local _, _, top, _, bottom = reaper.JS_Window_GetClientRect(arrange_view_hwnd)
 	return bottom - top
 end
 
@@ -27,7 +27,7 @@ vzoom.get_tcp_height = vzoom.get_arrange_view_height
 vzoom.get_current_max_track_height = vzoom.get_arrange_view_height
 
 function vzoom.estimate_track_height(vzoom3)
-	local supercollapsed, collapsed, small, recarm = reaper.NF_GetThemeDefaultTCPHeights()
+	local _, collapsed, small, recarm = reaper.NF_GetThemeDefaultTCPHeights()
 	local h_max = vzoom.get_current_max_track_height()
 	local h_30 = luautils.round(recarm + (h_max - recarm) * 0.4636)
 	if vzoom3 < 2 then

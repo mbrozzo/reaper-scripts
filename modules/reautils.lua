@@ -21,12 +21,17 @@ function reautils.get_all_tracks(include_master)
 	return tracks
 end
 
--- TODO: ricontrolla
--- function reautils.SetEnvHeight(envelope, laneHeight)
--- 	local BR_env = reaper.BR_EnvAlloc(envelope, false)
--- 	local active, visible, armed, inLane, _, defaultShape, _, _, _, _, faderScaling = reaper.BR_EnvGetProperties(BR_env)
--- 	reaper.BR_EnvSetProperties(BR_env, active, visible, armed, inLane, laneHeight, defaultShape, faderScaling)
--- 	reaper.BR_EnvFree(BR_env, true)
--- end
+function reautils.get_envelope_height(envelope)
+	local BR_envelope = reaper.BR_EnvAlloc(envelope, false)
+	local _, _, _, _, height, _, _, _, _, _, _ = reaper.BR_EnvGetProperties(BR_envelope)
+	return height
+end
+
+function reautils.set_envelope_height(envelope, height)
+	local BR_envelope = reaper.BR_EnvAlloc(envelope, false)
+	local active, visible, armed, inLane, _, defaultShape, _, _, _, _, faderScaling = reaper.BR_EnvGetProperties(BR_envelope)
+	reaper.BR_EnvSetProperties(BR_envelope, active, visible, armed, inLane, height, defaultShape, faderScaling)
+	reaper.BR_EnvFree(BR_envelope, true)
+end
 
 return reautils

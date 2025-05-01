@@ -95,9 +95,18 @@ function vzoom.zoom_proportionally(change_zoom, ...)
 	local overrides = luautils.map(tracks, function(track)
 		return reaper.GetMediaTrackInfo_Value(track, "I_HEIGHTOVERRIDE")
 	end)
-	-- If all overrides are 0 or locked, just call the function
-	if luautils.all(overrides, function(override, i)
-			return override == 0 or (override ~= 0 and locks[i] == 1)
+	-- Save envelope states
+	local envelopes_by_track = luautils.map(tracks, function(track)
+		return reautils.get_all_envelopes(track)
+	end)
+	local envelope_overrides_by_track = luautils.map(envelopes_by_track, function(envelopes)
+		return luautils.map(envelopes, function(envelope)
+			return reautils.get_envelope_height(envelope)
+		end)
+	end)
+	-- If all track are locked or don't have overrides, just call the function
+	if luautils.all(locks, function(lock, i)
+			return lock == 1 or (overrides[i] == 0 and luautils.only_contains_value(envelope_overrides_by_track[i], 0))
 		end) then
 		local retvals = { change_zoom(...) }
 		reaper.TrackList_AdjustWindows(false)
@@ -117,14 +126,22 @@ function vzoom.zoom_proportionally(change_zoom, ...)
 	-- Calculate height ratio
 	local ratio = new_h / old_h
 
-	-- Update track height overrides
+	-- Update track and envelope height overrides
 	for i, track in pairs(tracks) do
+		if locks[i] == 1 then goto continue end
+		-- Tracks
 		if overrides[i] ~= 0 then
-			if locks[i] == 0 then
-				overrides[i] = math.max(luautils.round(overrides[i] * ratio), 1)
-			end
-			reaper.SetMediaTrackInfo_Value(track, "I_HEIGHTOVERRIDE", overrides[i])
+			new_override = math.max(luautils.round(overrides[i] * ratio), 1)
+			reaper.SetMediaTrackInfo_Value(track, "I_HEIGHTOVERRIDE", new_override)
 		end
+		-- Envelopes
+		for j, envelope in pairs(envelopes_by_track[i]) do
+			if envelope_overrides_by_track[i][j] ~= 0 then
+				new_height = math.max(luautils.round(envelope_overrides_by_track[i][j] * ratio), 1)
+				reautils.set_envelope_height(envelope, new_height)
+			end
+		end
+    	::continue::
 	end
 
 	reaper.TrackList_AdjustWindows(false)

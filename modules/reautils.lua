@@ -21,6 +21,15 @@ function reautils.get_all_tracks(include_master)
 	return tracks
 end
 
+function reautils.get_all_envelopes(track)
+	local envelopes = {}
+	for i = 0, reaper.CountTrackEnvelopes(track) - 1 do
+		local envelope = reaper.GetTrackEnvelope(track, i)
+		table.insert(envelopes, envelope)
+	end
+	return envelopes
+end
+
 function reautils.get_envelope_height(envelope)
 	local BR_envelope = reaper.BR_EnvAlloc(envelope, false)
 	local _, _, _, _, height, _, _, _, _, _, _ = reaper.BR_EnvGetProperties(BR_envelope)

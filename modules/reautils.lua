@@ -36,6 +36,7 @@ function reautils.get_envelope_height(envelope)
 	return height
 end
 
+-- Credits: Edgemeal https://forum.cockos.com/showpost.php?p=2664097&postcount=5
 function reautils.set_envelope_height(envelope, height)
 	local BR_envelope = reaper.BR_EnvAlloc(envelope, false)
 	local active, visible, armed, inLane, _, defaultShape, _, _, _, _, faderScaling = reaper.BR_EnvGetProperties(BR_envelope)

@@ -6,12 +6,22 @@ local vzoom = require("vzoom")
 ENABLE_RELATIVE_GRID_SNAP_COMMAND = 41052
 
 local function print_update_track_height_lock_indicators_error()
-	reaper.ShowConsoleMsg(
-		"Error: the script to update track height lock indicators exited unexpectedly\n"
+	reaper.ShowMessageBox(
+		"The script to update track height lock indicators exited.",
+		"Warning", 0
 	)
 end
 
 local function main()
+	vzoom.handle_tcp_ctrl_mousewheel_zoom(function (passed_through, time, keys, rotate, x, y)
+		vzoom.zoom_proportionally(function()
+			if rotate > 0 then
+				reaper.SNM_SetDoubleConfigVar("vzoom3", math.min(reaper.SNM_GetDoubleConfigVar("vzoom3", -1) + 1, vzoom.MAX_VZOOM))
+			else
+				reaper.SNM_SetDoubleConfigVar("vzoom3", math.max(reaper.SNM_GetDoubleConfigVar("vzoom3", -1) - 1, 0))
+			end
+		end)
+	end)
 	reaper.Main_OnCommand(ENABLE_RELATIVE_GRID_SNAP_COMMAND, 0)
 	background.loop(
 		vzoom.update_track_height_lock_indicators,

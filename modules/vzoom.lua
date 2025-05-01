@@ -2,6 +2,7 @@ local script_path = debug.getinfo(1, 'S').source:match [[^@?(.*[\/])[^\/]-$]]
 package.path = script_path .. '?.lua;' .. package.path;
 local luautils = require("luautils")
 local reautils = require("reautils")
+local background = require("background")
 
 local vzoom = {}
 
@@ -141,14 +142,13 @@ function vzoom.zoom_proportionally(change_zoom, ...)
 				reautils.set_envelope_height(envelope, new_height)
 			end
 		end
-    	::continue::
+		::continue::
 	end
 
 	reaper.TrackList_AdjustWindows(false)
 
 	return table.unpack(retvals)
 end
-
 
 function vzoom.set_track_height_lock_indicator(track, lock_state)
 	local success, track_name = reaper.GetSetMediaTrackInfo_String(track, "P_NAME", "", false)
@@ -182,6 +182,46 @@ function vzoom.update_track_height_lock_indicators()
 		lock_state = reaper.GetMediaTrackInfo_Value(track, "B_HEIGHTLOCK")
 		vzoom.set_track_height_lock_indicator(track, lock_state)
 	end
+end
+
+function vzoom.handle_tcp_ctrl_mousewheel_zoom(callback)
+	callback = callback or function() end
+	local tcp = reaper.JS_Window_FindEx(reaper.GetMainHwnd(), nil, "REAPERTCPDisplay", "")
+	if reaper.JS_WindowMessage_Intercept(tcp, "WM_MOUSEWHEEL", false) ~= 1 then
+		reaper.ShowMessageBox("Failed to disable TCP Ctrl+Mousewheel zoom.", "Error", 0)
+		return
+	end
+	local prev_time = 0
+	background.loop(
+		function()
+			-- If not only Ctrl is pressed, pass the message through
+			local success, passed_through, time, keys, rotate, x, y = reaper.JS_WindowMessage_Peek(tcp, "WM_MOUSEWHEEL")
+			if not success then
+				reaper.ShowMessageBox("Failed to get TCP Ctrl+Mousewheel zoom message.", "Error", 0)
+				return
+			end
+			if time <= prev_time then
+				-- No new mousewheel events
+				return
+			end
+			-- If only ctrl is pressed
+			if reaper.JS_Mouse_GetState(60) == 4 then -- Modifier keys bitmask: 0b00111100 = 60; only ctrl pressed: 0b00000100 = 4
+				callback(passed_through, time, keys, rotate, x, y)
+			else
+				-- Pass the message through
+				reaper.JS_WindowMessage_Post(tcp, "WM_MOUSEWHEEL", keys, rotate, x, y)
+			end
+			prev_time = time
+		end,
+		function()
+			reaper.ShowMessageBox(
+				"The script to disable TCP Ctrl+Mousewheel zoom exited.",
+				"Warning", 0
+			)
+			reaper.JS_WindowMessage_Release(tcp, "WM_MOUSEWHEEL")
+		end,
+		false
+	)
 end
 
 return vzoom

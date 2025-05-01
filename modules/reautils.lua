@@ -39,7 +39,8 @@ end
 -- Credits: Edgemeal https://forum.cockos.com/showpost.php?p=2664097&postcount=5
 function reautils.set_envelope_height(envelope, height)
 	local BR_envelope = reaper.BR_EnvAlloc(envelope, false)
-	local active, visible, armed, inLane, _, defaultShape, _, _, _, _, faderScaling = reaper.BR_EnvGetProperties(BR_envelope)
+	local active, visible, armed, inLane, _, defaultShape, _, _, _, _, faderScaling =
+		reaper.BR_EnvGetProperties(BR_envelope)
 	reaper.BR_EnvSetProperties(BR_envelope, active, visible, armed, inLane, height, defaultShape, faderScaling)
 	reaper.BR_EnvFree(BR_envelope, true)
 end

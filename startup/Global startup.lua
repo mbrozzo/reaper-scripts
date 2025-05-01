@@ -13,10 +13,11 @@ local function print_update_track_height_lock_indicators_error()
 end
 
 local function main()
-	vzoom.handle_tcp_ctrl_mousewheel_zoom(function (passed_through, time, keys, rotate, x, y)
+	vzoom.handle_tcp_ctrl_mousewheel_zoom(function(_, _, _, rotate, _, _)
 		vzoom.zoom_proportionally(function()
 			if rotate > 0 then
-				reaper.SNM_SetDoubleConfigVar("vzoom3", math.min(reaper.SNM_GetDoubleConfigVar("vzoom3", -1) + 1, vzoom.MAX_VZOOM))
+				reaper.SNM_SetDoubleConfigVar("vzoom3",
+				math.min(reaper.SNM_GetDoubleConfigVar("vzoom3", -1) + 1, vzoom.MAX_VZOOM))
 			else
 				reaper.SNM_SetDoubleConfigVar("vzoom3", math.max(reaper.SNM_GetDoubleConfigVar("vzoom3", -1) - 1, 0))
 			end

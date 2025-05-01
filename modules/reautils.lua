@@ -1,8 +1,8 @@
 local reautils = {}
 
 -- Set ToolBar Button State
-function reautils.set_button_state(state)
-	local is_new_value, filename, sec, cmd, mode, resolution, val = reaper.get_action_context()
+function reautils.set_action_state(state)
+	local _, _, sec, cmd, _, _, _ = reaper.get_action_context()
 	reaper.SetToggleCommandState(sec, cmd, state or 0)
 	reaper.RefreshToolbar2(sec, cmd)
 end

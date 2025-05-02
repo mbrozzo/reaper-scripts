@@ -18,7 +18,7 @@ function vzoom.get_current_min_track_height()
 end
 
 function vzoom.get_arrange_view_height()
-	local arrange_view_hwnd = reaper.JS_Window_FindChild(reaper.GetMainHwnd(), "trackview", true)
+	local arrange_view_hwnd = reaper.JS_Window_FindEx(reaper.GetMainHwnd(), nil, "REAPERTrackListWindow", "trackview")
 	local _, _, top, _, bottom = reaper.JS_Window_GetClientRect(arrange_view_hwnd)
 	return bottom - top
 end
@@ -111,7 +111,7 @@ function vzoom.execute_keeping_vzoom_and_track_heights(func, ...)
 	return table.unpack(retvals)
 end
 
-function vzoom.zoom_proportionally(change_zoom, ...)
+function vzoom.zoom_proportionally_no_scroll(change_zoom, ...)
 	-- Save lock and override states
 	local tracks = reautils.get_all_tracks(true)
 	local locks = luautils.map(tracks, function(track)
@@ -174,6 +174,17 @@ function vzoom.zoom_proportionally(change_zoom, ...)
 	return table.unpack(retvals)
 end
 
+function vzoom.zoom_proportionally(change_zoom, ...)
+	local vzoommode = reaper.SNM_GetDoubleConfigVar("vzoommode", 0)
+	if vzoommode ~= 0 then
+		-- TODO
+	end
+	vzoom.zoom_proportionally_no_scroll(change_zoom, ...)
+	if vzoommode ~= 0 then
+		-- TODO
+	end
+end
+
 function vzoom.set_track_height_lock_indicator(track, lock_state)
 	local success, track_name = reaper.GetSetMediaTrackInfo_String(track, "P_NAME", "", false)
 	if not success then
@@ -206,46 +217,6 @@ function vzoom.update_track_height_lock_indicators()
 		lock_state = reaper.GetMediaTrackInfo_Value(track, "B_HEIGHTLOCK")
 		vzoom.set_track_height_lock_indicator(track, lock_state)
 	end
-end
-
-function vzoom.handle_tcp_ctrl_mousewheel(callback)
-	callback = callback or function() end
-	local tcp = reaper.JS_Window_FindEx(reaper.GetMainHwnd(), nil, "REAPERTCPDisplay", "")
-	if reaper.JS_WindowMessage_Intercept(tcp, "WM_MOUSEWHEEL", false) ~= 1 then
-		reaper.ShowMessageBox("Failed to disable TCP Ctrl+Mousewheel zoom.", "Error", 0)
-		return
-	end
-	local prev_time = 0
-	background.loop(
-		function()
-			-- If not only Ctrl is pressed, pass the message through
-			local success, passed_through, time, keys, rotate, x, y = reaper.JS_WindowMessage_Peek(tcp, "WM_MOUSEWHEEL")
-			if not success then
-				reaper.ShowMessageBox("Failed to get TCP Ctrl+Mousewheel zoom message.", "Error", 0)
-				return
-			end
-			if time <= prev_time then
-				-- No new mousewheel events
-				return
-			end
-			-- If only ctrl is pressed
-			if reaper.JS_Mouse_GetState(60) == 4 then -- Modifier keys bitmask: 0b00111100 = 60; only ctrl pressed: 0b00000100 = 4
-				callback(passed_through, time, keys, rotate, x, y)
-			else
-				-- Pass the message through
-				reaper.JS_WindowMessage_Post(tcp, "WM_MOUSEWHEEL", keys, rotate, x, y)
-			end
-			prev_time = time
-		end,
-		function()
-			reaper.ShowMessageBox(
-				"The script to disable TCP Ctrl+Mousewheel zoom exited.",
-				"Warning", 0
-			)
-			reaper.JS_WindowMessage_Release(tcp, "WM_MOUSEWHEEL")
-		end,
-		false
-	)
 end
 
 return vzoom

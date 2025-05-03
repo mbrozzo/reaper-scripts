@@ -34,14 +34,14 @@ function reautils.get_all_envelopes(track)
 	return envelopes
 end
 
-function reautils.get_envelope_height(envelope)
+function reautils.get_envelope_height_override(envelope)
 	local BR_envelope = reaper.BR_EnvAlloc(envelope, false)
 	local _, _, _, _, height, _, _, _, _, _, _ = reaper.BR_EnvGetProperties(BR_envelope)
 	return height
 end
 
 -- Credits: Edgemeal https://forum.cockos.com/showpost.php?p=2664097&postcount=5
-function reautils.set_envelope_height(envelope, height)
+function reautils.set_envelope_height_override(envelope, height)
 	local BR_envelope = reaper.BR_EnvAlloc(envelope, false)
 	local active, visible, armed, inLane, _, defaultShape, _, _, _, _, faderScaling =
 		reaper.BR_EnvGetProperties(BR_envelope)
@@ -113,7 +113,7 @@ function reautils.get_tcp_ui_element_vertical_positions()
 			top_position = next_top_position
 		})
 		previous_element_type = element_type
-		next_top_position = next_top_position + height + 1
+		next_top_position = next_top_position + height
 		return true
 	end
 
@@ -129,8 +129,11 @@ function reautils.get_tcp_ui_element_vertical_positions()
 		if reaper.GetMediaTrackInfo_Value(track, "B_SHOWINTCP") == 1 then
 			local envelopes = reautils.get_all_envelopes(track)
 			for _, envelope in ipairs(envelopes) do
-				insert_element_object(track, envelope, reautils.tcp_ui_element_types.ENVELOPE,
-					true, reautils.get_envelope_height(envelope))
+				local _, is_visible, _, is_in_lane, height, _, _, _, _, _, _ = reaper.BR_EnvGetProperties(envelope)
+				if is_visible and is_in_lane then
+					insert_element_object(track, envelope, reautils.tcp_ui_element_types.ENVELOPE,
+						true, height)
+				end
 			end
 		end
 
@@ -146,7 +149,6 @@ function reautils.get_tcp_ui_element_vertical_positions()
 	local supercollapsed, _, _, _ = reaper.NF_GetThemeDefaultTCPHeights()
 	for i, track in ipairs(tracks) do
 		local is_visible = reaper.IsTrackVisible(track, false)
-		reaper.ShowConsoleMsg("Visible: " .. tostring(is_visible) .. "\n")
 
 		-- If previous element was not a spacer, check if track has a spacer above
 		-- This way spacers are counted for hidden tracks too, but not when they are consecutive
@@ -178,11 +180,19 @@ function reautils.get_tcp_ui_element_vertical_positions()
 		local envelopes = reautils.get_all_envelopes(track)
 		for _, envelope in ipairs(envelopes) do
 			insert_element_object(track, envelope, reautils.tcp_ui_element_types.ENVELOPE,
-				false, reautils.get_envelope_height(envelope))
+				false, reaper.GetEnvelopeInfo_Value(envelope, "I_TCPH"))
 		end
 		::continue::
 	end
 	return ui_element_positions
+end
+
+function reautils.get_arrange_hwnd()
+	return reaper.JS_Window_FindEx(reaper.GetMainHwnd(), nil, "REAPERTrackListWindow", "trackview")
+end
+
+function reautils.get_tcp_hwnd()
+	return reaper.JS_Window_FindEx(reaper.GetMainHwnd(), nil, "REAPERTCPDisplay", "")
 end
 
 return reautils

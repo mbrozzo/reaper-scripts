@@ -16,8 +16,9 @@ function vzoom.get_current_min_track_height()
 	return collapsed
 end
 
-function vzoom.get_arrange_view_height()
-	local _, _, top, _, bottom = reaper.JS_Window_GetClientRect(reautils.get_arrange_hwnd())
+function vzoom.get_arrange_view_height(arrange_view_hwnd)
+	arrange_view_hwnd = arrange_view_hwnd or reautils.get_arrange_view_hwnd()
+	local _, _, top, _, bottom = reaper.JS_Window_GetClientRect(arrange_view_hwnd)
 	return bottom - top
 end
 
@@ -109,7 +110,83 @@ function vzoom.execute_keeping_vzoom_and_track_heights(func, ...)
 	return table.unpack(retvals)
 end
 
-function vzoom.zoom_proportionally_no_scroll(change_zoom, ...)
+vzoom.vertical_zoom_modes = {
+	TRACK_AT_VIEW_CENTER = 0,
+	TOP_OF_VIEW = 1,
+	LAST_SELECTED_TRACK = 2,
+	TRACK_UNDER_MOUSE = 3,
+}
+
+vzoom.DEFAULT_VERTICAL_SPACE_AFTER_TRACKS = 60 -- pixels
+
+function vzoom.get_all_tracks_height(master_track, last_track)
+	master_track = master_track or reaper.GetMasterTrack(0)
+	last_track = last_track or reaper.GetTrack(0, reaper.CountTracks(0) - 1) or master_track
+	local y_start = reaper.GetMediaTrackInfo_Value(master_track, "I_TCPY")
+	local y_end = reaper.GetMediaTrackInfo_Value(last_track, "I_TCPY") +
+		reaper.GetMediaTrackInfo_Value(last_track, "I_WNDH")
+	return y_end - y_start
+end
+
+function vzoom.get_track_at_y(ordered_tracks, y)
+	ordered_tracks = ordered_tracks or reautils.get_all_tracks(true)
+	local track = nil
+	local track_y = nil
+	for i = #ordered_tracks, 1, -1 do
+		local track_y_tmp = reaper.GetMediaTrackInfo_Value(ordered_tracks[i], "I_TCPY")
+		if track_y_tmp <= y then
+			track = ordered_tracks[i]
+			track_y = track_y_tmp
+			break
+		end
+	end
+	return track, track_y
+end
+
+local function get_vzoom_center_info(vertical_zoom_mode, ordered_tracks, arrange_view_hwnd)
+	vertical_zoom_mode = vertical_zoom_mode or reaper.SNM_GetDoubleConfigVar("vzoommode", 0)
+	ordered_tracks = ordered_tracks or reautils.get_all_tracks(true)
+	arrange_view_hwnd = arrange_view_hwnd or reautils.get_arrange_view_hwnd()
+	local arrange_view_height = vzoom.get_arrange_view_height(arrange_view_hwnd)
+	local vzoom_center_track = nil
+	local vzoom_center_y = arrange_view_height / 2 -- Default to center of arrange view
+	local vzoom_center_track_y_before_zoom = nil
+	local vzoom_center_track_h_before_zoom = nil
+	if vertical_zoom_mode == vzoom.vertical_zoom_modes.TOP_OF_VIEW then
+		vzoom_center_y = 0
+	elseif vertical_zoom_mode == vzoom.vertical_zoom_modes.LAST_SELECTED_TRACK then
+		vzoom_center_track = reaper.GetLastTouchedTrack()
+	elseif vertical_zoom_mode == vzoom.vertical_zoom_modes.TRACK_UNDER_MOUSE then
+		-- Get mouse vertical position relative to arrange view
+		local _, mouse_y = reaper.GetMousePosition()
+		local success, _, _, _, top = reaper.JS_Window_GetClientRect(arrange_view_hwnd)
+		if success then
+			vzoom_center_y = math.min(math.max(mouse_y - top, 0), arrange_view_height)
+		end
+	end
+	-- Get track at vzoom_center_y if vzoom_center_track was not already set
+	if vzoom_center_track == nil then
+		vzoom_center_track, vzoom_center_track_y_before_zoom = vzoom.get_track_at_y(tracks, vzoom_center_y)
+	end
+	-- If track was found but y and h data was not retrieved already, do it now
+	if vzoom_center_track then
+		vzoom_center_track_y_before_zoom = vzoom_center_track_y_before_zoom or
+			reaper.GetMediaTrackInfo_Value(vzoom_center_track, "I_TCPY")
+		vzoom_center_track_h_before_zoom = vzoom_center_track_h_before_zoom or
+			reaper.GetMediaTrackInfo_Value(vzoom_center_track, "I_TCPH")
+	end
+	return vzoom_center_track, vzoom_center_y, vzoom_center_track_y_before_zoom,
+		vzoom_center_track_h_before_zoom
+end
+
+function vzoom.zoom_proportionally(
+	change_zoom,                 -- Zooming function
+	is_adjust_scroll,            -- Adjust scroll position after zooming
+	is_remove_and_restore_overrides -- Remove height overrides to prevent wrong track sizing
+)
+	is_adjust_scroll = is_adjust_scroll or true
+	is_remove_and_restore_overrides = is_remove_and_restore_overrides or false
+
 	-- Save lock and override states
 	local tracks = reautils.get_all_tracks(true)
 	local locks = luautils.map(tracks, function(track)
@@ -127,119 +204,115 @@ function vzoom.zoom_proportionally_no_scroll(change_zoom, ...)
 			return reautils.get_envelope_height_override(envelope)
 		end)
 	end)
-	-- If all track are locked or don't have overrides, just call the function
-	if luautils.all(locks, function(lock, i)
-			return lock == 1 or (overrides[i] == 0 and luautils.only_contains_value(envelope_overrides_by_track[i], 0))
-		end) then
-		local retvals = { change_zoom(...) }
-		reaper.TrackList_AdjustWindows(false)
-		return retvals
-	end
-	-- else
 
-	-- Estimate track height and save it
+	if is_adjust_scroll then
+		-- Get information to handle scrolling
+		local arrange_view_hwnd = reautils.get_arrange_view_hwnd()
+		local is_success, position, page_size, min, max, track_pos =
+			reaper.JS_Window_GetScrollInfo(arrange_view_hwnd, "SB_VERT")
+		local all_tracks_height = vzoom.get_all_tracks_height(tracks[1], tracks[#tracks])
+		-- reaper.ClearConsole()
+		-- reaper.ShowConsoleMsg("is_success: " .. tostring(is_success) .. "\n")
+		-- reaper.ShowConsoleMsg("position: " .. position .. "\n")
+		-- reaper.ShowConsoleMsg("page_size: " .. page_size .. "\n")
+		-- reaper.ShowConsoleMsg("min: " .. min .. "\n")
+		-- reaper.ShowConsoleMsg("max: " .. max .. "\n")
+		-- reaper.ShowConsoleMsg("track_pos: " .. track_pos .. "\n")
+		-- reaper.ShowConsoleMsg("all_tracks_height: " .. all_tracks_height .. "\n")
+
+		local vertical_zoom_mode = reaper.SNM_GetDoubleConfigVar("vzoommode", 0)
+		local vzoom_center_track, vzoom_center_y, vzoom_center_track_y_before_zoom,
+		vzoom_center_track_h_before_zoom = get_vzoom_center_info(vertical_zoom_mode, tracks, arrange_view_hwnd)
+	end
+
+	-- Estimate track height before zooming
 	local old_h = vzoom.estimate_track_height(reaper.SNM_GetDoubleConfigVar("vzoom3", -1))
 
-	-- Execute the change zoom function
-	local retvals = { change_zoom(...) }
+	if is_remove_and_restore_overrides then
+		-- Remove height overrides to prevent zoom actions and functions using the wrong track size
+		-- Causes flickering
+		for _, track in ipairs(tracks) do
+			reaper.SetMediaTrackInfo_Value(track, "I_HEIGHTOVERRIDE", 0)
+		end
+	end
 
-	-- Estimate track height and save it
+	-- Execute the change zoom function
+	local retvals = { change_zoom() }
+
+	-- Estimate track height after zooming
 	local new_h = vzoom.estimate_track_height(reaper.SNM_GetDoubleConfigVar("vzoom3", -1))
 
 	-- Calculate height ratio
 	local ratio = new_h / old_h
 
-	-- Update track and envelope height overrides
+	-- Update track and envelope height overrides where necessary
 	for i, track in pairs(tracks) do
-		if locks[i] == 1 then goto continue end
 		-- Tracks
 		if overrides[i] ~= 0 then
-			new_override = math.max(luautils.round(overrides[i] * ratio), 1)
+			local new_override
+			if locks[i] == 1 then
+				new_override = overrides[i]
+			else
+				new_override = math.max(luautils.round(overrides[i] * ratio), 1)
+			end
 			reaper.SetMediaTrackInfo_Value(track, "I_HEIGHTOVERRIDE", new_override)
 		end
 		-- Envelopes
 		for j, envelope in pairs(envelopes_by_track[i]) do
 			if envelope_overrides_by_track[i][j] ~= 0 then
-				new_height = math.max(luautils.round(envelope_overrides_by_track[i][j] * ratio), 1)
-				reautils.set_envelope_height_override(envelope, new_height)
+				local new_override
+				if locks[i] == 1 then
+					new_override = envelope_overrides_by_track[i][j]
+				else
+					new_override = math.max(luautils.round(envelope_overrides_by_track[i][j] * ratio), 1)
+				end
+				reautils.set_envelope_height_override(envelope, new_override)
 			end
 		end
-		::continue::
+	end
+
+	-- reaper.TrackList_AdjustWindows(false) -> necessario?
+
+	if is_adjust_scroll then
+		-- Handle scrolling
+		if vzoom_center_track_y_before_zoom == 0 and ratio > 1 then
+			-- Stick zoom center track to top of arrange view when zooming in
+			-- by setting the scroll position to the distance between the master and zoom center track
+			reaper.JS_Window_SetScrollPos(arrange_view_hwnd, "SB_VERT",
+				reaper.GetMediaTrackInfo_Value(vzoom_center_track, "I_TCPY") -
+				reaper.GetMediaTrackInfo_Value(reaper.GetMasterTrack, "I_TCPY"))
+		else
+			local new_is_success, new_position, new_page_size, new_min, new_max, new_track_pos =
+				reaper.JS_Window_GetScrollInfo(arrange_view_hwnd, "SB_VERT")
+			local new_all_tracks_height = vzoom.get_all_tracks_height(tracks[1], tracks[#tracks])
+			-- reaper.ShowConsoleMsg("retval: " .. tostring(is_success) .. "\n")
+			-- reaper.ShowConsoleMsg("new_position: " .. new_position .. "\n")
+			-- reaper.ShowConsoleMsg("new_page_size: " .. new_page_size .. "\n")
+			-- reaper.ShowConsoleMsg("new_min: " .. new_min .. "\n")
+			-- reaper.ShowConsoleMsg("new_max: " .. new_max .. "\n")
+			-- reaper.ShowConsoleMsg("new_track_pos: " .. new_track_pos .. "\n")
+			-- reaper.ShowConsoleMsg("new_all_tracks_height: " .. new_all_tracks_height .. "\n")
+			if new_is_success then
+				-- Zoom mode TOP_OF_VIEW
+				-- TODO
+				-- -- Other zoom modes
+				-- if vzoommode == vzoom.vertical_zoom_modes.LAST_SELECTED_TRACK and vzoom_center_track then
+				-- 	vzoom_center_track = reaper.GetLastTouchedTrack()
+				-- 	if last_sel_track then
+				-- 		target_pos = reaper.GetMediaTrackInfo_Value(last_sel_track, "I_TCPY")
+				-- 	end
+				-- elseif vzoommode == vzoom.vertical_zoom_modes.TRACK_UNDER_MOUSE and vzoom_center_track then
+				-- elseif vzoommode == vzoom.vertical_zoom_modes.TRACK_AT_VIEW_CENTER and vzoom_center_track then
+				-- else --
+				-- end
+				reaper.ShowConsoleMsg("target_position: " .. target_position .. "\n")
+				-- reaper.JS_Window_SetScrollPos(arrange_view_hwnd, "SB_VERT", target_position)
+			end
+		end
 	end
 
 	reaper.TrackList_AdjustWindows(false)
-
 	return table.unpack(retvals)
-end
-
-vzoom.vertical_zoom_modes = {
-	TRACK_AT_VIEW_CENTER = 0,
-	TOP_OF_VIEW = 1,
-	LAST_SELECTED_TRACK = 2,
-	TRACK_UNDER_MOUSE = 3,
-}
-
-function vzoom.zoom_proportionally(change_zoom, ...)
-	-- Get information to handle scrolling
-	local is_success, position, page_size, min, max, track_pos =
-		reaper.JS_Window_GetScrollInfo(reautils.get_tcp_hwnd(), "SB_VERT")
-	reaper.ShowConsoleMsg("is_success: " .. tostring(is_success) .. "\n")
-	reaper.ShowConsoleMsg("position: " .. position .. "\n")
-	reaper.ShowConsoleMsg("page_size: " .. page_size .. "\n")
-	reaper.ShowConsoleMsg("min: " .. min .. "\n")
-	reaper.ShowConsoleMsg("max: " .. max .. "\n")
-	reaper.ShowConsoleMsg("track_pos: " .. track_pos .. "\n")
-
-	local vzoommode = reaper.SNM_GetDoubleConfigVar("vzoommode", 0)
-	local vzoom_center_track = nil -- TOP_OF_VIEW
-	if was_scroll_info_retrieved_successfully then
-		if vzoommode == vzoom.vertical_zoom_modes.LAST_SELECTED_TRACK then
-			vzoom_center_track = reaper.GetLastTouchedTrack()
-		elseif vzoommode == vzoom.vertical_zoom_modes.TRACK_UNDER_MOUSE then
-			vzoom_center_track = reautils.get_track_at_mouse()
-		else -- TRACK_AT_VIEW_CENTER (default)
-			vzoom_center_track = reautils.get_track_at_view_center()
-		end
-	end
-
-	-- Zoom
-	vzoom.zoom_proportionally_no_scroll(change_zoom, ...)
-
-	-- Handle scrolling
-	if was_scroll_info_retrieved_successfully then
-		-- Idea per corretto resizing della pagina quando dezoommi:
-		-- - spostare scroll in cima
-		-- - renderizzare se necessario
-		-- - leggere pagesize
-
-		local is_success, new_position, new_page_size, new_min, new_max, new_track_pos =
-			reaper.JS_Window_GetScrollInfo(reautils.get_arrange_hwnd(), "SB_VERT")
-		reaper.ShowConsoleMsg("retval: " .. tostring(is_success) .. "\n")
-		reaper.ShowConsoleMsg("new_position: " .. new_position .. "\n")
-		reaper.ShowConsoleMsg("new_page_size: " .. new_page_size .. "\n")
-		reaper.ShowConsoleMsg("new_min: " .. new_min .. "\n")
-		reaper.ShowConsoleMsg("new_max: " .. new_max .. "\n")
-		reaper.ShowConsoleMsg("new_track_pos: " .. new_track_pos .. "\n")
-		local max_position
-		if was_scroll_info_retrieved_successfully then
-			max_position = max - pageSize
-		else
-			max_position = vzoom.get_tcp_height()
-		end
-
-		local target_pos = position * new_max / max -- TOP_OF_VIEW
-		-- TODO
-		-- if vzoommode == vzoom.vertical_zoom_modes.LAST_SELECTED_TRACK and vzoom_center_track then
-		-- 	vzoom_center_track = reaper.GetLastTouchedTrack()
-		-- 	if last_sel_track then
-		-- 		target_pos = reaper.GetMediaTrackInfo_Value(last_sel_track, "I_TCPY")
-		-- 	end
-		-- elseif vzoommode == vzoom.vertical_zoom_modes.TRACK_UNDER_MOUSE and vzoom_center_track then
-		-- elseif vzoommode == vzoom.vertical_zoom_modes.TRACK_AT_VIEW_CENTER and vzoom_center_track then
-		-- else --
-		-- end
-		reaper.JS_Window_SetScrollPos(reautils.get_arrange_hwnd(), "SB_VERT", math.min(target_pos, max_position))
-	end
 end
 
 function vzoom.set_track_height_lock_indicator(track, lock_state)

@@ -187,12 +187,14 @@ function reautils.get_tcp_ui_element_vertical_positions()
 	return ui_element_positions
 end
 
-function reautils.get_arrange_hwnd()
-	return reaper.JS_Window_FindEx(reaper.GetMainHwnd(), nil, "REAPERTrackListWindow", "trackview")
+function reautils.get_arrange_view_hwnd(main_window_hwnd)
+	main_window_hwnd = main_window_hwnd or reaper.GetMainHwnd()
+	return reaper.JS_Window_FindEx(main_window_hwnd, nil, "REAPERTrackListWindow", "trackview")
 end
 
-function reautils.get_tcp_hwnd()
-	return reaper.JS_Window_FindEx(reaper.GetMainHwnd(), nil, "REAPERTCPDisplay", "")
+function reautils.get_tcp_hwnd(main_window_hwnd)
+	main_window_hwnd = main_window_hwnd or reaper.GetMainHwnd()
+	return reaper.JS_Window_FindEx(main_window_hwnd, nil, "REAPERTCPDisplay", "")
 end
 
 return reautils

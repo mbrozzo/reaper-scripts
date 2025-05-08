@@ -54,12 +54,12 @@ reautils.track_compact_states = {
 	SMALL = 1.0,
 	COLLAPSED_OR_HIDDEN = 2.0,
 }
-function reautils.get_all_track_compact_states()
-	local tracks = reautils.get_all_tracks(false)
+function reautils.get_all_track_compact_states(ordered_tracks_no_master)
+	ordered_tracks_no_master = ordered_tracks_no_master or reautils.get_all_tracks(false)
 	local track_compact_states = {}
 	local folder_depth = 1
 	local folder_compact_state_stack = { reautils.track_compact_states.NORMAL }
-	for i, track in ipairs(tracks) do
+	for i, track in ipairs(ordered_tracks_no_master) do
 		reaper.ShowConsoleMsg("Track " .. i .. "\n")
 		reaper.ShowConsoleMsg("Depth: " .. folder_depth .. "\n")
 		reaper.ShowConsoleMsg("Stack before: " .. table.concat(folder_compact_state_stack, ", ") .. "\n")
@@ -85,106 +85,9 @@ end
 
 function reautils.get_folder_collapse_cycle_config()
 	local tcpalign = reaper.SNM_GetIntConfigVar("tcpalign", 0)
-	local skips_small_state = tcpalign & 512 == 512 -- 512 = b001000000000
-	local hides_instead_of_collapsing = tcpalign & 256 == 256 -- 256 = b000100000000
-	return skips_small_state, hides_instead_of_collapsing
-end
-
-reautils.SPACE_BELOW_MASTER_TRACK = 5 -- pixels
-reautils.tcp_ui_element_types = {
-	SPACER = 1,
-	TRACK = 2,
-	ENVELOPE = 3,
-}
-local TOGGLE_MASTER_TRACK_VISIBLE_COMMAND_ID = 40110
-
-function reautils.get_tcp_ui_element_vertical_positions()
-	local ui_element_positions = {}
-	local previous_element_type = nil
-	local next_top_position = 0
-	local function insert_element_object(track, envelope, element_type, is_master, height)
-		if height < 1 then return false end -- Ignore elements with height < 1
-		table.insert(ui_element_positions, {
-			track = track,
-			envelope = envelope,
-			element_type = element_type,
-			is_master = is_master,
-			height = height,
-			top_position = next_top_position
-		})
-		previous_element_type = element_type
-		next_top_position = next_top_position + height
-		return true
-	end
-
-	-- Master track
-	if reaper.GetToggleCommandState(TOGGLE_MASTER_TRACK_VISIBLE_COMMAND_ID) == 1 then
-		local track = reaper.GetMasterTrack(0)
-
-		-- Track controls
-		insert_element_object(track, nil, reautils.tcp_ui_element_types.TRACK,
-			true, reaper.GetMediaTrackInfo_Value(track, "I_TCPH"))
-
-		-- Envelopes
-		if reaper.GetMediaTrackInfo_Value(track, "B_SHOWINTCP") == 1 then
-			local envelopes = reautils.get_all_envelopes(track)
-			for _, envelope in ipairs(envelopes) do
-				local _, is_visible, _, is_in_lane, height, _, _, _, _, _, _ = reaper.BR_EnvGetProperties(envelope)
-				if is_visible and is_in_lane then
-					insert_element_object(track, envelope, reautils.tcp_ui_element_types.ENVELOPE,
-						true, height)
-				end
-			end
-		end
-
-		-- Default space below master track
-		insert_element_object(track, nil,
-			reautils.tcp_ui_element_types.SPACER, true, reautils.SPACE_BELOW_MASTER_TRACK)
-	end
-
-	-- Other tracks
-	local tracks = reautils.get_all_tracks(false)
-	local track_compact_states = reautils.get_all_track_compact_states()
-	local spacer_normal_height = reaper.SNM_GetIntConfigVar("trackgapmax", 16)
-	local supercollapsed, _, _, _ = reaper.NF_GetThemeDefaultTCPHeights()
-	for i, track in ipairs(tracks) do
-		local is_visible = reaper.IsTrackVisible(track, false)
-
-		-- If previous element was not a spacer, check if track has a spacer above
-		-- This way spacers are counted for hidden tracks too, but not when they are consecutive
-		if
-			previous_element_type ~= reautils.tcp_ui_element_types.SPACER and
-			reaper.GetMediaTrackInfo_Value(track, "I_SPACER") == 1
-		then
-			local spacer_height = spacer_normal_height
-			if -- If track is collapsed by folder and visible
-				track_compact_states[i] == reautils.track_compact_states.COLLAPSED_OR_HIDDEN
-				and is_visible
-			then
-				spacer_height = supercollapsed
-			end
-			insert_element_object(track, nil,
-				reautils.tcp_ui_element_types.SPACER, false, spacer_height)
-		end
-
-		-- Ignore rest of track if is not visible
-		if not is_visible then
-			goto continue
-		end
-
-		-- Track controls
-		insert_element_object(track, nil, reautils.tcp_ui_element_types.TRACK,
-			false, reaper.GetMediaTrackInfo_Value(track, "I_TCPH"))
-
-		-- Envelopes
-		local envelopes = reautils.get_all_envelopes(track)
-		for _, envelope in ipairs(envelopes) do
-			insert_element_object(track, envelope, reautils.tcp_ui_element_types.ENVELOPE,
-				false, reaper.GetEnvelopeInfo_Value(envelope, "I_TCPH"))
-		end
-		::continue::
-	end
-	return ui_element_positions
+	local is_skip_small_state = tcpalign & 512 == 512      -- 512 = b001000000000
+	local is_hide_instead_of_collapse = tcpalign & 256 == 256 -- 256 = b000100000000
+	return is_skip_small_state, is_hide_instead_of_collapse
 end
 
 function reautils.get_arrange_view_hwnd(main_window_hwnd)
@@ -195,6 +98,78 @@ end
 function reautils.get_tcp_hwnd(main_window_hwnd)
 	main_window_hwnd = main_window_hwnd or reaper.GetMainHwnd()
 	return reaper.JS_Window_FindEx(main_window_hwnd, nil, "REAPERTCPDisplay", "")
+end
+
+reautils.tcp_element_types = {
+	TRACK = 1,
+	ENVELOPE = 2,
+	SPACE = 3,
+}
+-- Returns:
+-- 1. type (track/envelope/space)
+-- 2. element (track/envelope) or track before space
+-- 3. element (track/envelope) or track after space or nil if space at the bottom of TCP
+-- 4. y of element
+-- 5. height of element or nil if space at the bottom of TCP
+function reautils.get_element_at_tcp_y(ordered_tracks, tcp_y)
+	-- initialize variables
+	ordered_tracks = ordered_tracks or reautils.get_all_tracks(true)
+	local ordered_envelopes_by_track = luautils.imap(ordered_tracks, reautils.get_all_envelopes)
+
+	-- check tracks starting from the bottom
+	local previously_checked_track = nil
+	local previously_checked_track_y = nil -- y of the previously checked track (the next track in the TCP)
+	for i = #ordered_tracks, 1, -1 do
+		-- check space between this and the previously checked track track (or empty space after last track)
+		local track = ordered_tracks[i]
+		local track_y = reaper.GetMediaTrackInfo_Value(track, "I_TCPY")
+		local spacer_y = track_y + reaper.GetMediaTrackInfo_Value(track, "I_WNDH")
+		if tcp_y >= spacer_y then
+			if previously_checked_track_y and tcp_y < previously_checked_track_y then
+				-- found spacer, return
+				return
+					reautils.tcp_element_types.SPACE,
+					track,     -- track over space
+					previously_checked_track, -- track under space
+					spacer_y,
+					previously_checked_track_y - spacer_y
+			elseif previously_checked_track_y == nil then -- only happens when checking bottom track
+				-- found empty space, return
+				return
+					reautils.tcp_element_types.SPACE,
+					track, -- track over space
+					nil, -- no track under space
+					spacer_y,
+					nil -- no height
+			end
+		end
+		previously_checked_track = track -- set previously checked track to current track
+		previously_checked_track_y = track_y -- set previously checked track y to current track y
+		-- check envelopes of track
+		for j = #ordered_envelopes_by_track[i], 1, -1 do
+			local envelope = ordered_envelopes_by_track[i][j]
+			local envelope_y = reaper.GetEnvelopeInfo_Value(envelope, "I_TCPY")
+			if tcp_y >= envelope_y then
+				-- found envelope, return
+				return
+					reautils.tcp_element_types.ENVELOPE,
+					envelope,
+					envelope,
+					envelope_y,
+					reaper.GetEnvelopeInfo_Value(envelope, "I_TCPH")
+			end
+		end
+		-- check track
+		if track_y <= tcp_y then
+			-- found track, return
+			return
+				reautils.tcp_element_types.TRACK,
+				track,
+				track,
+				track_y,
+				reaper.GetMediaTrackInfo_Value(ordered_tracks[i], "I_TCPH")
+		end
+	end
 end
 
 return reautils

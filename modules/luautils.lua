@@ -4,10 +4,19 @@ function luautils.round(x)
 	return math.floor(x + 0.5)
 end
 
-function luautils.map(table, func)
+function luautils.map(table, func, iterator_func)
+	iterator_func = iterator_func or pairs
 	local retvals = {}
-	for k, v in ipairs(table) do
+	for k, v in pairs(table) do
 		retvals[k] = func(v, k)
+	end
+	return retvals
+end
+
+function luautils.imap(table, func)
+	local retvals = {}
+	for i, v in ipairs(table) do
+		table.insert(retvals, func(v, i))
 	end
 	return retvals
 end

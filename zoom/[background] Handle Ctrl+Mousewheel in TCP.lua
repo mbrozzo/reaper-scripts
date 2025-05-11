@@ -1,11 +1,12 @@
 local script_path = debug.getinfo(1, 'S').source:match [[^@?(.*[\/])[^\/]-$]]
 package.path = script_path .. '../modules/?.lua;' .. package.path;
+local reautils = require("reautils")
 local background = require("background")
 local vzoom = require("vzoom")
 
 local function handle_tcp_ctrl_mousewheel(callback)
 	callback = callback or function() end
-	local tcp = reaper.JS_Window_FindEx(reaper.GetMainHwnd(), nil, "REAPERTCPDisplay", "")
+	local tcp = reautils.get_tcp_hwnd()
 	if reaper.JS_WindowMessage_Intercept(tcp, "WM_MOUSEWHEEL", false) ~= 1 then
 		reaper.ShowMessageBox("Failed to disable TCP Ctrl+Mousewheel zoom.", "Error", 0)
 		return

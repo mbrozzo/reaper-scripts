@@ -6,4 +6,5 @@ function main()
 	reaper.GetSet_LoopTimeRange(true, false, t_start, t_end, false)
 end
 
+reaper.set_action_options(2) -- Ignore if run while other instance is running
 reaper.defer(main)

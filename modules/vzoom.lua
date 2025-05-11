@@ -5,11 +5,11 @@ local ru = require("reautils")
 
 local vzoom = {}
 
-vzoom.DEFAULT_MAX_VZOOM = 40                     -- Maximum zoom level
-vzoom.MINIMIZE_TOGGLE_COMMAND_ID = 40110 -- Command ID for toggling track height to minimum
-vzoom.MAXIMIZE_TOGGLE_COMMAND_ID = 40113 -- Command ID for toggling track height to maximum
-vzoom.ZOOM_IN_COMMAND_ID = 40111         -- Command ID for zooming in
-vzoom.ZOOM_OUT_COMMAND_ID = 40112        -- Command ID for zooming out
+vzoom.DEFAULT_MAX_VZOOM = 40                   -- Maximum zoom level
+vzoom.MINIMIZE_TOGGLE_COMMAND_ID = 40110       -- Command ID for toggling track height to minimum
+vzoom.MAXIMIZE_TOGGLE_COMMAND_ID = 40113       -- Command ID for toggling track height to maximum
+vzoom.ZOOM_IN_COMMAND_ID = 40111               -- Command ID for zooming in
+vzoom.ZOOM_OUT_COMMAND_ID = 40112              -- Command ID for zooming out
 vzoom.DEFAULT_VERTICAL_SPACE_AFTER_TRACKS = 60 -- pixels
 vzoom.VERTICAL_ZOOM_MODES = {
 	TRACK_AT_VIEW_CENTER = 0,
@@ -28,6 +28,7 @@ function vzoom.get_arrange_view_height(arrange_view_hwnd)
 	local _, _, top, _, bottom = reaper.JS_Window_GetClientRect(arrange_view_hwnd)
 	return bottom - top
 end
+
 -- Aliases for get_arrange_view_height
 vzoom.get_tcp_height = vzoom.get_arrange_view_height
 vzoom.get_current_max_track_height = vzoom.get_arrange_view_height
@@ -162,15 +163,10 @@ function vzoom.zoom_proportionally(change_zoom)
 	local arrange_view_hwnd = ru.arrange_view.get_hwnd()
 	local vzoom_y = vzoom.get_vzoom_center_y(vzoom_mode, arrange_view_hwnd)
 	local vzoom_el_type, vzoom_el, vzoom_el_y, vzoom_el_h = ru.tcp.get_element_at_y(tracks, vzoom_y)
+	local arrange_view_height = vzoom.get_arrange_view_height(arrange_view_hwnd)
 
 	-- Estimate track height before zooming
 	local old_h = vzoom.estimate_default_track_height(reaper.SNM_GetDoubleConfigVar("vzoom3", -1))
-
-	-- -- Remove height overrides to prevent zoom actions and functions using the wrong track size
-	-- -- Causes flickering :C
-	-- for _, track in ipairs(tracks) do
-	-- 	reaper.SetMediaTrackInfo_Value(track, "I_HEIGHTOVERRIDE", 0)
-	-- end
 
 	-- Execute the change zoom function
 	local retvals = { change_zoom() }
@@ -238,16 +234,16 @@ function vzoom.zoom_proportionally(change_zoom)
 		end
 
 		-- Handle scrolling
-		local is_scroll_info_success, _, page_size, scroll_min, scroll_max, _ =
+		local is_new_scroll_info_success, _, page_size, scroll_min, scroll_max, _ =
 			reaper.JS_Window_GetScrollInfo(arrange_view_hwnd, "SB_VERT")
-		if is_scroll_info_success and new_vzoom_el_y ~= nil and new_vzoom_el_h ~= nil and new_scroll_y ~= nil then
+		if is_new_scroll_info_success and new_vzoom_el_y ~= nil and new_vzoom_el_h ~= nil and new_scroll_y ~= nil then
 			-- vzoom_y = vzoom.get_arrange_view_height(arrange_view_hwnd) / 2
 			local final_scroll_y
 			if not vzoom_el_h then
 				final_scroll_y = scroll_max - page_size
 			elseif vzoom_mode == vzoom.VERTICAL_ZOOM_MODES.LAST_SELECTED_TRACK then
 				final_scroll_y = new_scroll_y + new_vzoom_el_y + new_vzoom_el_h / 2 -
-					vzoom.get_arrange_view_height(arrange_view_hwnd) / 2
+					arrange_view_height / 2
 			else
 				-- offset between vzoom center and top of vzoom center element
 				local vzoom_y_offset = vzoom_y - vzoom_el_y
@@ -261,11 +257,29 @@ function vzoom.zoom_proportionally(change_zoom)
 				final_scroll_y = math.max(scroll_min,
 					math.min(scroll_max - page_size, final_scroll_y))
 			end
+
+			if
+				vzoom_el_type == ru.tcp.ELEMENT_TYPES.TRACK or
+				vzoom_el_type == ru.tcp.ELEMENT_TYPES.ENVELOPE
+			then
+				-- Check if element was inside TCP or was at top of it before zoom
+				if
+					(vzoom_el_y >= 0 and -- Element is not above visible part of TCP
+					vzoom_el_y + vzoom_el_h <= arrange_view_height) or -- Element is not below visible part of TCP
+					vzoom_el_y == 0 -- Element touches the top of the visible part of TCP
+				then
+					-- Calculate min and max scroll to fit element in window
+					local scroll_max_for_track = new_scroll_y + new_vzoom_el_y
+					local scroll_min_for_track = scroll_max_for_track - arrange_view_height + new_vzoom_el_h
+					-- Constrain vzoom_el to TCP
+					final_scroll_y = math.min(scroll_max_for_track, math.max(scroll_min_for_track, final_scroll_y))
+				end
+			end
+
 			-- Round new_scroll_y to nearest integer
 			final_scroll_y = lu.math.round(final_scroll_y)
 
 			reaper.JS_Window_SetScrollPos(arrange_view_hwnd, "SB_VERT", final_scroll_y)
-			-- TODO: when zooming in, scroll so that center track stays in view
 		end
 	end
 

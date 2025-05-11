@@ -45,14 +45,9 @@ function ru.track.get_all_compact_states(ordered_tracks_no_master)
 	local folder_depth = 1
 	local folder_compact_state_stack = { ru.track.COMPACT_STATES.NORMAL }
 	for i, track in ipairs(ordered_tracks_no_master) do
-		reaper.ShowConsoleMsg("Track " .. i .. "\n")
-		reaper.ShowConsoleMsg("Depth: " .. folder_depth .. "\n")
-		reaper.ShowConsoleMsg("Stack before: " .. table.concat(folder_compact_state_stack, ", ") .. "\n")
 		local prev_folder_compact_state = folder_compact_state_stack[folder_depth]
 		table.insert(track_compact_states, prev_folder_compact_state)
 		local depth_change = reaper.GetMediaTrackInfo_Value(track, "I_FOLDERDEPTH")
-		reaper.ShowConsoleMsg("Depth change: " .. depth_change .. "\n")
-		reaper.ShowConsoleMsg("Folder compact: " .. reaper.GetMediaTrackInfo_Value(track, "I_FOLDERCOMPACT") .. "\n")
 		folder_depth = folder_depth + depth_change
 		if depth_change == 1 then -- Folder is a parent: insert folder compact state in stack
 			table.insert(folder_compact_state_stack,
@@ -63,7 +58,6 @@ function ru.track.get_all_compact_states(ordered_tracks_no_master)
 				depth_change = depth_change + 1
 			end
 		end
-		reaper.ShowConsoleMsg("Stack after: " .. table.concat(folder_compact_state_stack, ", ") .. "\n")
 	end
 	return track_compact_states
 end

@@ -37,7 +37,7 @@ local function handle_tcp_ctrl_mousewheel(callback)
 			reaper.ShowConsoleMsg("The script to disable TCP Ctrl+Mousewheel zoom exited.")
 			reaper.JS_WindowMessage_Release(tcp, "WM_MOUSEWHEEL")
 		end,
-		false
+		true
 	)
 end
 

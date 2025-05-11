@@ -9,7 +9,7 @@ local function main()
 		function ()
 			reaper.ShowConsoleMsg("The script to update track height lock indicators exited.")
 		end,
-		false
+		true
 	)
 end
 

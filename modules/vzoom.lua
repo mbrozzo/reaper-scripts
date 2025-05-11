@@ -5,11 +5,18 @@ local ru = require("reautils")
 
 local vzoom = {}
 
-vzoom.MAX_VZOOM = 40                     -- Maximum zoom level
+vzoom.DEFAULT_MAX_VZOOM = 40                     -- Maximum zoom level
 vzoom.MINIMIZE_TOGGLE_COMMAND_ID = 40110 -- Command ID for toggling track height to minimum
 vzoom.MAXIMIZE_TOGGLE_COMMAND_ID = 40113 -- Command ID for toggling track height to maximum
 vzoom.ZOOM_IN_COMMAND_ID = 40111         -- Command ID for zooming in
 vzoom.ZOOM_OUT_COMMAND_ID = 40112        -- Command ID for zooming out
+vzoom.DEFAULT_VERTICAL_SPACE_AFTER_TRACKS = 60 -- pixels
+vzoom.VERTICAL_ZOOM_MODES = {
+	TRACK_AT_VIEW_CENTER = 0,
+	TOP_OF_VIEW = 1,
+	LAST_SELECTED_TRACK = 2,
+	TRACK_UNDER_MOUSE = 3,
+}
 
 function vzoom.get_current_min_track_height()
 	local _, collapsed, _, _ = reaper.NF_GetThemeDefaultTCPHeights()
@@ -21,12 +28,11 @@ function vzoom.get_arrange_view_height(arrange_view_hwnd)
 	local _, _, top, _, bottom = reaper.JS_Window_GetClientRect(arrange_view_hwnd)
 	return bottom - top
 end
-
 -- Aliases for get_arrange_view_height
 vzoom.get_tcp_height = vzoom.get_arrange_view_height
 vzoom.get_current_max_track_height = vzoom.get_arrange_view_height
 
-function vzoom.estimate_track_height(vzoom3)
+function vzoom.estimate_default_track_height(vzoom3)
 	local _, collapsed, small, recarm = reaper.NF_GetThemeDefaultTCPHeights()
 	local h_max = vzoom.get_current_max_track_height()
 	local h_30 = lu.math.round(recarm + (h_max - recarm) * 0.4636)
@@ -45,23 +51,23 @@ function vzoom.estimate_track_height(vzoom3)
 	return h_max
 end
 
-function vzoom.estimate_vzoom3(track_height)
+function vzoom.estimate_vzoom3(default_track_height)
 	local _, collapsed, small, recarm = reaper.NF_GetThemeDefaultTCPHeights()
 	local h_max = vzoom.get_current_max_track_height()
 	local h_30 = lu.math.round(recarm + (h_max - recarm) * 0.4636)
-	if track_height < small then
-		return 2 / (small - collapsed) * (track_height - collapsed)
+	if default_track_height < small then
+		return 2 / (small - collapsed) * (default_track_height - collapsed)
 	end
-	if track_height < recarm then
-		return 2 + 2 / (recarm - small) * (track_height - small)
+	if default_track_height < recarm then
+		return 2 + 2 / (recarm - small) * (default_track_height - small)
 	end
-	if track_height < h_30 then
-		return 4 + 26 / (h_30 - recarm) * (track_height - recarm)
+	if default_track_height < h_30 then
+		return 4 + 26 / (h_30 - recarm) * (default_track_height - recarm)
 	end
-	if track_height < h_max then
-		return 30 + 10 / (h_max - h_30) * (track_height - h_30)
+	if default_track_height < h_max then
+		return 30 + 10 / (h_max - h_30) * (default_track_height - h_30)
 	end
-	return vzoom.MAX_VZOOM
+	return vzoom.DEFAULT_MAX_VZOOM
 end
 
 function vzoom.get_max_vzoom()
@@ -110,38 +116,20 @@ function vzoom.execute_keeping_vzoom_and_track_heights(func, ...)
 	return table.unpack(retvals)
 end
 
-vzoom.vertical_zoom_modes = {
-	TRACK_AT_VIEW_CENTER = 0,
-	TOP_OF_VIEW = 1,
-	LAST_SELECTED_TRACK = 2,
-	TRACK_UNDER_MOUSE = 3,
-}
-
-vzoom.DEFAULT_VERTICAL_SPACE_AFTER_TRACKS = 60 -- pixels
-
-function vzoom.get_tcp_elements_height(master_track, last_track)
-	master_track = master_track or reaper.GetMasterTrack(0)
-	last_track = last_track or reaper.GetTrack(0, reaper.CountTracks(0) - 1) or master_track
-	local y_start = reaper.GetMediaTrackInfo_Value(master_track, "I_TCPY")
-	local y_end = reaper.GetMediaTrackInfo_Value(last_track, "I_TCPY") +
-		reaper.GetMediaTrackInfo_Value(last_track, "I_WNDH")
-	return y_end - y_start
-end
-
 function vzoom.get_vzoom_center_y(vzoom_mode, arrange_view_hwnd)
 	vzoom_mode = vzoom_mode or reaper.SNM_GetIntConfigVar("vzoommode", 0)
 	arrange_view_hwnd = arrange_view_hwnd or ru.get_arrange_view_hwnd()
 	local arrange_view_height = vzoom.get_arrange_view_height(arrange_view_hwnd)
 	local vzoom_y = arrange_view_height / 2 -- Default to center of arrange view
-	if vzoom_mode == vzoom.vertical_zoom_modes.TOP_OF_VIEW then
+	if vzoom_mode == vzoom.VERTICAL_ZOOM_MODES.TOP_OF_VIEW then
 		vzoom_y = 0
-	elseif vzoom_mode == vzoom.vertical_zoom_modes.LAST_SELECTED_TRACK then
+	elseif vzoom_mode == vzoom.VERTICAL_ZOOM_MODES.LAST_SELECTED_TRACK then
 		local vzoom_center_track = reaper.GetLastTouchedTrack()
 		if vzoom_center_track then
 			vzoom_y = reaper.GetMediaTrackInfo_Value(vzoom_center_track, "I_TCPY") +
 				reaper.GetMediaTrackInfo_Value(vzoom_center_track, "I_TCPH") / 2
 		end
-	elseif vzoom_mode == vzoom.vertical_zoom_modes.TRACK_UNDER_MOUSE then
+	elseif vzoom_mode == vzoom.VERTICAL_ZOOM_MODES.TRACK_UNDER_MOUSE then
 		-- Get mouse vertical position relative to arrange view
 		local _, mouse_y = reaper.GetMousePosition()
 		local success, _, top, _, _ = reaper.JS_Window_GetClientRect(arrange_view_hwnd)
@@ -176,7 +164,7 @@ function vzoom.zoom_proportionally(change_zoom)
 	local vzoom_el_type, vzoom_el, vzoom_el_y, vzoom_el_h = ru.get_tcp_element_at_y(tracks, vzoom_y)
 
 	-- Estimate track height before zooming
-	local old_h = vzoom.estimate_track_height(reaper.SNM_GetDoubleConfigVar("vzoom3", -1))
+	local old_h = vzoom.estimate_default_track_height(reaper.SNM_GetDoubleConfigVar("vzoom3", -1))
 
 	-- -- Remove height overrides to prevent zoom actions and functions using the wrong track size
 	-- -- Causes flickering :C
@@ -188,7 +176,7 @@ function vzoom.zoom_proportionally(change_zoom)
 	local retvals = { change_zoom() }
 
 	-- Estimate track height after zooming
-	local new_h = vzoom.estimate_track_height(reaper.SNM_GetDoubleConfigVar("vzoom3", -1))
+	local new_h = vzoom.estimate_default_track_height(reaper.SNM_GetDoubleConfigVar("vzoom3", -1))
 
 	-- Calculate height ratio
 	local ratio = new_h / old_h
@@ -225,17 +213,17 @@ function vzoom.zoom_proportionally(change_zoom)
 		local new_scroll_y = -reaper.GetMediaTrackInfo_Value(tracks[1], "I_TCPY")
 		local new_vzoom_el_y = nil
 		local new_vzoom_el_h = 0
-		if vzoom_el_type == ru.tcp_element_types.TRACK then
+		if vzoom_el_type == ru.TCP_ELEMENT_TYPES.TRACK then
 			new_vzoom_el_y = reaper.GetMediaTrackInfo_Value(vzoom_el, "I_TCPY")
 			new_vzoom_el_h = reaper.GetMediaTrackInfo_Value(vzoom_el, "I_TCPH")
-		elseif vzoom_el_type == ru.tcp_element_types.ENVELOPE then
+		elseif vzoom_el_type == ru.TCP_ELEMENT_TYPES.ENVELOPE then
 			local track = reaper.GetEnvelopeInfo_Value(vzoom_el, "P_TRACK")
 			if track then
 				local track_y = reaper.GetMediaTrackInfo_Value(track, "I_TCPY")
 				new_vzoom_el_y = track_y + reaper.GetEnvelopeInfo_Value(vzoom_el, "I_TCPY")
 				new_vzoom_el_h = reaper.GetEnvelopeInfo_Value(vzoom_el, "I_TCPH")
 			end
-		elseif vzoom_el_type == ru.tcp_element_types.SPACE then
+		elseif vzoom_el_type == ru.TCP_ELEMENT_TYPES.SPACE then
 			-- Space starts at the bottom of vzoom_el track (including envelopes)
 			new_vzoom_el_y = reaper.GetMediaTrackInfo_Value(vzoom_el, "I_TCPY") +
 				reaper.GetMediaTrackInfo_Value(vzoom_el, "I_WNDH")
@@ -267,7 +255,7 @@ function vzoom.zoom_proportionally(change_zoom)
 			local final_scroll_y
 			if not vzoom_el_h then
 				final_scroll_y = scroll_max - page_size
-			elseif vzoom_mode == vzoom.vertical_zoom_modes.LAST_SELECTED_TRACK then
+			elseif vzoom_mode == vzoom.VERTICAL_ZOOM_MODES.LAST_SELECTED_TRACK then
 				final_scroll_y = new_scroll_y + new_vzoom_el_y + new_vzoom_el_h / 2 -
 					vzoom.get_arrange_view_height(arrange_view_hwnd) / 2
 				reaper.ShowConsoleMsg(string.format(

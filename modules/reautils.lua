@@ -4,6 +4,18 @@ local lu = require("luautils")
 
 local ru = {}
 
+ru.TOGGLE_MASTER_TRACK_VISIBLE_COMMAND_ID = 40075
+ru.TCP_ELEMENT_TYPES = {
+	TRACK = 1,
+	ENVELOPE = 2,
+	SPACE = 3,
+}
+ru.TRACK_COMPACT_STATES = {
+	NORMAL = 0.0,
+	SMALL = 1.0,
+	COLLAPSED_OR_HIDDEN = 2.0,
+}
+
 -- Set ToolBar Button State
 function ru.set_action_state(state)
 	local _, _, sec, cmd, _, _, _ = reaper.get_action_context()
@@ -49,16 +61,11 @@ function ru.set_envelope_height_override(envelope, height)
 	reaper.BR_EnvFree(BR_envelope, true)
 end
 
-ru.track_compact_states = {
-	NORMAL = 0.0,
-	SMALL = 1.0,
-	COLLAPSED_OR_HIDDEN = 2.0,
-}
 function ru.get_all_track_compact_states(ordered_tracks_no_master)
 	ordered_tracks_no_master = ordered_tracks_no_master or ru.get_all_tracks(false)
 	local track_compact_states = {}
 	local folder_depth = 1
-	local folder_compact_state_stack = { ru.track_compact_states.NORMAL }
+	local folder_compact_state_stack = { ru.TRACK_COMPACT_STATES.NORMAL }
 	for i, track in ipairs(ordered_tracks_no_master) do
 		reaper.ShowConsoleMsg("Track " .. i .. "\n")
 		reaper.ShowConsoleMsg("Depth: " .. folder_depth .. "\n")
@@ -100,16 +107,9 @@ function ru.get_tcp_hwnd(main_window_hwnd)
 	return reaper.JS_Window_FindEx(main_window_hwnd, nil, "REAPERTCPDisplay", "")
 end
 
-ru.TOGGLE_MASTER_TRACK_VISIBLE_COMMAND_ID = 40075
-ru.tcp_element_types = {
-	TRACK = 1,
-	ENVELOPE = 2,
-	SPACE = 3,
-}
 -- Returns:
 -- 1. type (track/envelope/space)
 -- 2. element (track/envelope) or track before space
--- 3. element (track/envelope) or track after space or nil if space at the bottom of TCP
 -- 4. y of element
 -- 5. height of element or nil if space at the bottom of TCP
 function ru.get_tcp_element_at_y(ordered_tracks, tcp_y)
@@ -127,7 +127,7 @@ function ru.get_tcp_element_at_y(ordered_tracks, tcp_y)
 		if tcp_y >= space_y then
 			-- found spacer, return
 			return
-				ru.tcp_element_types.SPACE,
+				ru.TCP_ELEMENT_TYPES.SPACE,
 				track, -- track above space
 				space_y,
 				below_track_y and below_track_y - space_y or nil
@@ -143,7 +143,7 @@ function ru.get_tcp_element_at_y(ordered_tracks, tcp_y)
 				if tcp_y >= envelope_y then
 					-- found envelope, return
 					return
-						ru.tcp_element_types.ENVELOPE,
+						ru.TCP_ELEMENT_TYPES.ENVELOPE,
 						envelope,
 						envelope_y,
 						reaper.GetEnvelopeInfo_Value(envelope, "I_TCPH")
@@ -160,7 +160,7 @@ function ru.get_tcp_element_at_y(ordered_tracks, tcp_y)
 		if is_visible and track_y <= tcp_y then
 			-- found track, return
 			return
-				ru.tcp_element_types.TRACK,
+				ru.TCP_ELEMENT_TYPES.TRACK,
 				track,
 				track_y,
 				reaper.GetMediaTrackInfo_Value(ordered_tracks[i], "I_TCPH")

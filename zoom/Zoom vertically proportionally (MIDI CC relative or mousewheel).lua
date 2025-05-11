@@ -8,13 +8,11 @@ function main()
 
 	vzoom.zoom_proportionally(function()
 		if val > 0 then
-			-- reaper.SNM_SetDoubleConfigVar("vzoom3", math.min(reaper.SNM_GetDoubleConfigVar("vzoom3", -1) + 1, vzoom.get_max_vzoom()))
-			reaper.CSurf_OnZoom(0, 1) -- also scrolls
+			reaper.SNM_SetDoubleConfigVar("vzoom3", math.min(reaper.SNM_GetDoubleConfigVar("vzoom3", -1) + 1, vzoom.get_max_vzoom()))
 		else
-			-- reaper.SNM_SetDoubleConfigVar("vzoom3", math.max(reaper.SNM_GetDoubleConfigVar("vzoom3", -1) - 1, 0))
-			reaper.CSurf_OnZoom(0, -1) -- also scrolls
+			reaper.SNM_SetDoubleConfigVar("vzoom3", math.max(reaper.SNM_GetDoubleConfigVar("vzoom3", -1) - 1, 0))
 		end
-	end, true, true)
+	end)
 end
 
 reaper.defer(main)

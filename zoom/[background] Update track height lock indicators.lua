@@ -13,4 +13,5 @@ local function main()
 	)
 end
 
+reaper.set_action_options(1) -- Terminate if run while other instance is running
 main()

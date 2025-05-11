@@ -8,4 +8,5 @@ function main()
 	end)
 end
 
+reaper.set_action_options(2) -- Ignore if run while other instance is running
 reaper.defer(main)

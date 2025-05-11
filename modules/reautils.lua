@@ -1,6 +1,6 @@
 local script_path = debug.getinfo(1, 'S').source:match [[^@?(.*[\/])[^\/]-$]]
 package.path = script_path .. '?.lua;' .. package.path;
-local luautils = require("luautils")
+local lu = require("luautils")
 
 local reautils = {}
 
@@ -114,7 +114,7 @@ reautils.tcp_element_types = {
 function reautils.get_element_at_tcp_y(ordered_tracks, tcp_y)
 	-- initialize variables
 	ordered_tracks = ordered_tracks or reautils.get_all_tracks(true)
-	local ordered_envelopes_by_track = luautils.imap(ordered_tracks, reautils.get_all_envelopes)
+	local ordered_envelopes_by_track = lu.table.imap(ordered_tracks, reautils.get_all_envelopes)
 
 	-- check tracks starting from the bottom
 	local previously_checked_track = nil

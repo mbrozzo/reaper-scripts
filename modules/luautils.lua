@@ -1,10 +1,16 @@
 local luautils = {}
 
-function luautils.round(x)
+-- Math
+luautils.math = {}
+
+function luautils.math.round(x)
 	return math.floor(x + 0.5)
 end
 
-function luautils.map(table, func, iterator_func)
+-- Tables
+luautils.table = {}
+
+function luautils.table.map(table, func, iterator_func)
 	iterator_func = iterator_func or pairs
 	local retvals = {}
 	for k, v in pairs(table) do
@@ -13,48 +19,65 @@ function luautils.map(table, func, iterator_func)
 	return retvals
 end
 
-function luautils.imap(table, func)
-	local retvals = {}
-	for i, v in ipairs(table) do
-		table.insert(retvals, func(v, i))
-	end
-	return retvals
+function luautils.table.imap(table, func)
+	return luautils.table.map(table, func, ipairs)
 end
 
-function luautils.any(table, test_func)
+function luautils.table.any(table, test_func, iterator_func)
+	iterator_func = iterator_func or pairs
 	test_func = test_func or function(v)
 		return v
 	end
-	for k, v in ipairs(table) do
-		if test_func(v, k) then -- also accepts a test_func which only operates on the value
+	for i, v in iterator_func(table) do
+		if test_func(v, i) then -- also accepts a test_func which only operates on the value
 			return true
 		end
 	end
 	return false
 end
 
-function luautils.all(table, test_func)
-	return not luautils.any(table, function(v, k)
+function luautils.table.iany(table, test_func)
+	luautils.table.any(table, test_func, ipairs)
+end
+
+function luautils.table.all(table, test_func, iterator_func)
+	return not luautils.table.any(table, function(v, k)
 		return not test_func(v, k)
-	end)
+	end, iterator_func)
 end
 
-function luautils.only_contains_value(table, value)
-	return luautils.all(table, function(v, k)
+function luautils.table.iall(table, test_func)
+	luautils.table.all(table, test_func, ipairs)
+end
+
+function luautils.table.contains(table, value, iterator_func)
+	return luautils.table.any(table, function(v, k)
 		return v == value
-	end)
+	end, iterator_func)
 end
 
-function luautils.contains_value(table, value)
-	return luautils.any(table, function(v, k)
+function luautils.table.icontains(table, value)
+	luautils.table.contains(table, value, ipairs)
+end
+
+function luautils.table.only_contains(table, value, iterator_func)
+	return luautils.table.all(table, function(v, k)
 		return v == value
-	end)
+	end, iterator_func)
 end
 
-function luautils.does_not_contain_value(table, value)
-	return luautils.all(table, function(v, k)
+function luautils.table.ionly_contains(table, value)
+	luautils.table.only_contains(table, value, ipairs)
+end
+
+function luautils.table.does_not_contain(table, value, iterator_func)
+	return luautils.table.all(table, function(v, k)
 		return v ~= value
-	end)
+	end, iterator_func)
+end
+
+function luautils.table.idoes_not_contain(table, value)
+	luautils.table.does_not_contain(table, value, ipairs)
 end
 
 return luautils

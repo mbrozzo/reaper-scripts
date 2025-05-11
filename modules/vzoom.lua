@@ -24,7 +24,7 @@ function vzoom.get_current_min_track_height()
 end
 
 function vzoom.get_arrange_view_height(arrange_view_hwnd)
-	arrange_view_hwnd = arrange_view_hwnd or ru.get_arrange_view_hwnd()
+	arrange_view_hwnd = arrange_view_hwnd or ru.arrange_view.get_hwnd()
 	local _, _, top, _, bottom = reaper.JS_Window_GetClientRect(arrange_view_hwnd)
 	return bottom - top
 end
@@ -84,7 +84,7 @@ function vzoom.execute_keeping_vzoom_and_track_heights(func, ...)
 	end
 
 	-- Save lock and override states
-	local tracks = ru.get_all_tracks(true)
+	local tracks = ru.track.get_all(true)
 	local locks = lu.table.imap(tracks, function(track)
 		return reaper.GetMediaTrackInfo_Value(track, "B_HEIGHTLOCK")
 	end)
@@ -118,7 +118,7 @@ end
 
 function vzoom.get_vzoom_center_y(vzoom_mode, arrange_view_hwnd)
 	vzoom_mode = vzoom_mode or reaper.SNM_GetIntConfigVar("vzoommode", 0)
-	arrange_view_hwnd = arrange_view_hwnd or ru.get_arrange_view_hwnd()
+	arrange_view_hwnd = arrange_view_hwnd or ru.arrange_view.get_hwnd()
 	local arrange_view_height = vzoom.get_arrange_view_height(arrange_view_hwnd)
 	local vzoom_y = arrange_view_height / 2 -- Default to center of arrange view
 	if vzoom_mode == vzoom.VERTICAL_ZOOM_MODES.TOP_OF_VIEW then
@@ -142,7 +142,7 @@ end
 
 function vzoom.zoom_proportionally(change_zoom)
 	-- Save lock and override states
-	local tracks = ru.get_all_tracks(true)
+	local tracks = ru.track.get_all(true)
 	local locks = lu.table.imap(tracks, function(track)
 		return reaper.GetMediaTrackInfo_Value(track, "B_HEIGHTLOCK")
 	end)
@@ -150,18 +150,18 @@ function vzoom.zoom_proportionally(change_zoom)
 		return reaper.GetMediaTrackInfo_Value(track, "I_HEIGHTOVERRIDE")
 	end)
 	-- Save envelope states
-	local envelopes_by_track = lu.table.imap(tracks, ru.get_all_envelopes)
+	local envelopes_by_track = lu.table.imap(tracks, ru.envelope.get_all)
 	local envelope_overrides_by_track = lu.table.imap(envelopes_by_track, function(envelopes)
 		return lu.table.imap(envelopes, function(envelope)
-			return ru.get_envelope_height_override(envelope)
+			return ru.envelope.get_height_override(envelope)
 		end)
 	end)
 
 	-- Gather information to handle scrolling
 	local vzoom_mode = reaper.SNM_GetIntConfigVar("vzoommode", 0)
-	local arrange_view_hwnd = ru.get_arrange_view_hwnd()
+	local arrange_view_hwnd = ru.arrange_view.get_hwnd()
 	local vzoom_y = vzoom.get_vzoom_center_y(vzoom_mode, arrange_view_hwnd)
-	local vzoom_el_type, vzoom_el, vzoom_el_y, vzoom_el_h = ru.get_tcp_element_at_y(tracks, vzoom_y)
+	local vzoom_el_type, vzoom_el, vzoom_el_y, vzoom_el_h = ru.tcp.get_element_at_y(tracks, vzoom_y)
 
 	-- Estimate track height before zooming
 	local old_h = vzoom.estimate_default_track_height(reaper.SNM_GetDoubleConfigVar("vzoom3", -1))
@@ -200,7 +200,7 @@ function vzoom.zoom_proportionally(change_zoom)
 				if locks[i] ~= 1 then
 					new_override = math.max(lu.math.round(override * ratio), 1)
 				end
-				ru.set_envelope_height_override(envelopes_by_track[i][j], new_override)
+				ru.envelope.set_height_override(envelopes_by_track[i][j], new_override)
 			end
 		end
 	end
@@ -213,17 +213,17 @@ function vzoom.zoom_proportionally(change_zoom)
 		local new_scroll_y = -reaper.GetMediaTrackInfo_Value(tracks[1], "I_TCPY")
 		local new_vzoom_el_y = nil
 		local new_vzoom_el_h = 0
-		if vzoom_el_type == ru.TCP_ELEMENT_TYPES.TRACK then
+		if vzoom_el_type == ru.tcp.ELEMENT_TYPES.TRACK then
 			new_vzoom_el_y = reaper.GetMediaTrackInfo_Value(vzoom_el, "I_TCPY")
 			new_vzoom_el_h = reaper.GetMediaTrackInfo_Value(vzoom_el, "I_TCPH")
-		elseif vzoom_el_type == ru.TCP_ELEMENT_TYPES.ENVELOPE then
+		elseif vzoom_el_type == ru.tcp.ELEMENT_TYPES.ENVELOPE then
 			local track = reaper.GetEnvelopeInfo_Value(vzoom_el, "P_TRACK")
 			if track then
 				local track_y = reaper.GetMediaTrackInfo_Value(track, "I_TCPY")
 				new_vzoom_el_y = track_y + reaper.GetEnvelopeInfo_Value(vzoom_el, "I_TCPY")
 				new_vzoom_el_h = reaper.GetEnvelopeInfo_Value(vzoom_el, "I_TCPH")
 			end
-		elseif vzoom_el_type == ru.TCP_ELEMENT_TYPES.SPACE then
+		elseif vzoom_el_type == ru.tcp.ELEMENT_TYPES.SPACE then
 			-- Space starts at the bottom of vzoom_el track (including envelopes)
 			new_vzoom_el_y = reaper.GetMediaTrackInfo_Value(vzoom_el, "I_TCPY") +
 				reaper.GetMediaTrackInfo_Value(vzoom_el, "I_WNDH")
@@ -238,16 +238,6 @@ function vzoom.zoom_proportionally(change_zoom)
 		end
 
 		-- Handle scrolling
-		reaper.ClearConsole()
-		reaper.ShowConsoleMsg(string.format(
-			"-- Gathered data\n" ..
-			"vzoom_y: " .. tostring(vzoom_y) .. "\n" ..
-			"vzoom_el_y: " .. tostring(vzoom_el_y) .. "\n" ..
-			"vzoom_el_h: " .. tostring(vzoom_el_h) .. "\n" ..
-			"new_vzoom_el_y: " .. tostring(new_vzoom_el_y) .. "\n" ..
-			"new_vzoom_el_h: " .. tostring(new_vzoom_el_h) .. "\n" ..
-			"new_scroll_y: " .. tostring(new_scroll_y) .. "\n"
-		))
 		local is_scroll_info_success, _, page_size, scroll_min, scroll_max, _ =
 			reaper.JS_Window_GetScrollInfo(arrange_view_hwnd, "SB_VERT")
 		if is_scroll_info_success and new_vzoom_el_y ~= nil and new_vzoom_el_h ~= nil and new_scroll_y ~= nil then
@@ -258,10 +248,6 @@ function vzoom.zoom_proportionally(change_zoom)
 			elseif vzoom_mode == vzoom.VERTICAL_ZOOM_MODES.LAST_SELECTED_TRACK then
 				final_scroll_y = new_scroll_y + new_vzoom_el_y + new_vzoom_el_h / 2 -
 					vzoom.get_arrange_view_height(arrange_view_hwnd) / 2
-				reaper.ShowConsoleMsg(string.format(
-					"-- Calculated values\n" ..
-					"final_scroll_y: " .. tostring(final_scroll_y) .. "\n"
-				))
 			else
 				-- offset between vzoom center and top of vzoom center element
 				local vzoom_y_offset = vzoom_y - vzoom_el_y
@@ -271,13 +257,6 @@ function vzoom.zoom_proportionally(change_zoom)
 				local new_scroll_err = new_vzoom_el_y + new_vzoom_y_offset - vzoom_y
 				-- final scroll value
 				final_scroll_y = new_scroll_y + new_scroll_err
-				reaper.ShowConsoleMsg(string.format(
-					"-- Calculated values\n" ..
-					"vzoom_y_offset: " .. tostring(vzoom_y_offset) .. "\n" ..
-					"new_vzoom_y_offset: " .. tostring(new_vzoom_y_offset) .. "\n" ..
-					"new_scroll_err: " .. tostring(new_scroll_err) .. "\n" ..
-					"final_scroll_y: " .. tostring(final_scroll_y) .. "\n"
-				))
 				-- Constrain new_scroll_y to TCP
 				final_scroll_y = math.max(scroll_min,
 					math.min(scroll_max - page_size, final_scroll_y))

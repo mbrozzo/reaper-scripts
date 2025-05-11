@@ -6,7 +6,7 @@ local background = {}
 
 function background.loop(main_function, atexit_function, update_action_state)
 	if not main_function then return end
-	if update_action_state then ru.set_action_state(1) end
+	if update_action_state then ru.action.set_state(1) end
 	local main
 	main = function()
 		main_function()
@@ -17,7 +17,7 @@ function background.loop(main_function, atexit_function, update_action_state)
 		if atexit_function then
 			atexit_function()
 		end
-		if update_action_state then ru.set_action_state(0) end
+		if update_action_state then ru.action.set_state(0) end
 	end)
 end
 

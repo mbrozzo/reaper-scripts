@@ -4,26 +4,28 @@ local lu = require("luautils")
 
 local ru = {}
 
-ru.TOGGLE_MASTER_TRACK_VISIBLE_COMMAND_ID = 40075
-ru.TCP_ELEMENT_TYPES = {
-	TRACK = 1,
-	ENVELOPE = 2,
-	SPACE = 3,
-}
-ru.TRACK_COMPACT_STATES = {
-	NORMAL = 0.0,
-	SMALL = 1.0,
-	COLLAPSED_OR_HIDDEN = 2.0,
+-- Actions
+ru.action = {}
+ru.action.ids = {
+	TOGGLE_MASTER_TRACK_VISIBLE = 40075
 }
 
 -- Set ToolBar Button State
-function ru.set_action_state(state)
+function ru.action.set_state(state)
 	local _, _, sec, cmd, _, _, _ = reaper.get_action_context()
 	reaper.SetToggleCommandState(sec, cmd, state or 0)
 	reaper.RefreshToolbar2(sec, cmd)
 end
 
-function ru.get_all_tracks(include_master)
+-- Tracks
+ru.track = {}
+ru.track.COMPACT_STATES = {
+	NORMAL = 0.0,
+	SMALL = 1.0,
+	COLLAPSED_OR_HIDDEN = 2.0,
+}
+
+function ru.track.get_all(include_master)
 	include_master = include_master or false
 	local tracks = {}
 	if include_master then
@@ -37,35 +39,11 @@ function ru.get_all_tracks(include_master)
 	return tracks
 end
 
-function ru.get_all_envelopes(track)
-	local envelopes = {}
-	for i = 0, reaper.CountTrackEnvelopes(track) - 1 do
-		local envelope = reaper.GetTrackEnvelope(track, i)
-		table.insert(envelopes, envelope)
-	end
-	return envelopes
-end
-
-function ru.get_envelope_height_override(envelope)
-	local br_envelope = reaper.BR_EnvAlloc(envelope, false)
-	local _, _, _, _, height, _, _, _, _, _, _ = reaper.BR_EnvGetProperties(br_envelope)
-	return height
-end
-
--- Credits: Edgemeal https://forum.cockos.com/showpost.php?p=2664097&postcount=5
-function ru.set_envelope_height_override(envelope, height)
-	local BR_envelope = reaper.BR_EnvAlloc(envelope, false)
-	local active, visible, armed, inLane, _, defaultShape, _, _, _, _, faderScaling =
-		reaper.BR_EnvGetProperties(BR_envelope)
-	reaper.BR_EnvSetProperties(BR_envelope, active, visible, armed, inLane, height, defaultShape, faderScaling)
-	reaper.BR_EnvFree(BR_envelope, true)
-end
-
-function ru.get_all_track_compact_states(ordered_tracks_no_master)
-	ordered_tracks_no_master = ordered_tracks_no_master or ru.get_all_tracks(false)
+function ru.track.get_all_compact_states(ordered_tracks_no_master)
+	ordered_tracks_no_master = ordered_tracks_no_master or ru.track.get_all(false)
 	local track_compact_states = {}
 	local folder_depth = 1
-	local folder_compact_state_stack = { ru.TRACK_COMPACT_STATES.NORMAL }
+	local folder_compact_state_stack = { ru.track.COMPACT_STATES.NORMAL }
 	for i, track in ipairs(ordered_tracks_no_master) do
 		reaper.ShowConsoleMsg("Track " .. i .. "\n")
 		reaper.ShowConsoleMsg("Depth: " .. folder_depth .. "\n")
@@ -90,19 +68,60 @@ function ru.get_all_track_compact_states(ordered_tracks_no_master)
 	return track_compact_states
 end
 
-function ru.get_folder_collapse_cycle_config()
+-- Envelopes
+ru.envelope = {}
+
+function ru.envelope.get_all(track)
+	local envelopes = {}
+	for i = 0, reaper.CountTrackEnvelopes(track) - 1 do
+		local envelope = reaper.GetTrackEnvelope(track, i)
+		table.insert(envelopes, envelope)
+	end
+	return envelopes
+end
+
+function ru.envelope.get_height_override(envelope)
+	local br_envelope = reaper.BR_EnvAlloc(envelope, false)
+	local _, _, _, _, height, _, _, _, _, _, _ = reaper.BR_EnvGetProperties(br_envelope)
+	return height
+end
+
+-- Credits: Edgemeal https://forum.cockos.com/showpost.php?p=2664097&postcount=5
+function ru.envelope.set_height_override(envelope, height)
+	local BR_envelope = reaper.BR_EnvAlloc(envelope, false)
+	local active, visible, armed, inLane, _, defaultShape, _, _, _, _, faderScaling =
+		reaper.BR_EnvGetProperties(BR_envelope)
+	reaper.BR_EnvSetProperties(BR_envelope, active, visible, armed, inLane, height, defaultShape, faderScaling)
+	reaper.BR_EnvFree(BR_envelope, true)
+end
+
+-- Configuration
+ru.config = {}
+
+function ru.config.get_folder_collapse_cycle()
 	local tcpalign = reaper.SNM_GetIntConfigVar("tcpalign", 0)
 	local is_skip_small_state = tcpalign & 512 == 512      -- 512 = b001000000000
 	local is_hide_instead_of_collapse = tcpalign & 256 == 256 -- 256 = b000100000000
 	return is_skip_small_state, is_hide_instead_of_collapse
 end
 
-function ru.get_arrange_view_hwnd(main_window_hwnd)
+-- Arrange view
+ru.arrange_view = {}
+
+function ru.arrange_view.get_hwnd(main_window_hwnd)
 	main_window_hwnd = main_window_hwnd or reaper.GetMainHwnd()
 	return reaper.JS_Window_FindEx(main_window_hwnd, nil, "REAPERTrackListWindow", "trackview")
 end
 
-function ru.get_tcp_hwnd(main_window_hwnd)
+-- TCP
+ru.tcp = {}
+ru.tcp.ELEMENT_TYPES = {
+	TRACK = 1,
+	ENVELOPE = 2,
+	SPACE = 3,
+}
+
+function ru.tcp.get_hwnd(main_window_hwnd)
 	main_window_hwnd = main_window_hwnd or reaper.GetMainHwnd()
 	return reaper.JS_Window_FindEx(main_window_hwnd, nil, "REAPERTCPDisplay", "")
 end
@@ -112,10 +131,10 @@ end
 -- 2. element (track/envelope) or track before space
 -- 4. y of element
 -- 5. height of element or nil if space at the bottom of TCP
-function ru.get_tcp_element_at_y(ordered_tracks, tcp_y)
+function ru.tcp.get_element_at_y(ordered_tracks, tcp_y)
 	-- initialize variables
-	ordered_tracks = ordered_tracks or ru.get_all_tracks(true)
-	local ordered_envelopes_by_track = lu.table.imap(ordered_tracks, ru.get_all_envelopes)
+	ordered_tracks = ordered_tracks or ru.track.get_all(true)
+	local ordered_envelopes_by_track = lu.table.imap(ordered_tracks, ru.envelope.get_all)
 
 	-- check tracks starting from the bottom
 	local below_track_y = nil -- y of the previously checked track (the next track in the TCP)
@@ -127,7 +146,7 @@ function ru.get_tcp_element_at_y(ordered_tracks, tcp_y)
 		if tcp_y >= space_y then
 			-- found spacer, return
 			return
-				ru.TCP_ELEMENT_TYPES.SPACE,
+				ru.tcp.ELEMENT_TYPES.SPACE,
 				track, -- track above space
 				space_y,
 				below_track_y and below_track_y - space_y or nil
@@ -143,7 +162,7 @@ function ru.get_tcp_element_at_y(ordered_tracks, tcp_y)
 				if tcp_y >= envelope_y then
 					-- found envelope, return
 					return
-						ru.TCP_ELEMENT_TYPES.ENVELOPE,
+						ru.tcp.ELEMENT_TYPES.ENVELOPE,
 						envelope,
 						envelope_y,
 						reaper.GetEnvelopeInfo_Value(envelope, "I_TCPH")
@@ -155,12 +174,12 @@ function ru.get_tcp_element_at_y(ordered_tracks, tcp_y)
 		if i > 1 then
 			is_visible = reaper.GetMediaTrackInfo_Value(track, "B_SHOWINTCP")
 		else
-			is_visible = reaper.GetToggleCommandStateEx(0, ru.TOGGLE_MASTER_TRACK_VISIBLE_COMMAND_ID)
+			is_visible = reaper.GetToggleCommandStateEx(0, ru.action.ids.TOGGLE_MASTER_TRACK_VISIBLE)
 		end
 		if is_visible and track_y <= tcp_y then
 			-- found track, return
 			return
-				ru.TCP_ELEMENT_TYPES.TRACK,
+				ru.tcp.ELEMENT_TYPES.TRACK,
 				track,
 				track_y,
 				reaper.GetMediaTrackInfo_Value(ordered_tracks[i], "I_TCPH")

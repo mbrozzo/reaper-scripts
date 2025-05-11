@@ -6,7 +6,7 @@ local vzoom = require("vzoom")
 
 local function handle_tcp_ctrl_mousewheel(callback)
 	callback = callback or function() end
-	local tcp = reautils.get_tcp_hwnd()
+	local tcp = reautils.tcp.get_hwnd()
 	if reaper.JS_WindowMessage_Intercept(tcp, "WM_MOUSEWHEEL", false) ~= 1 then
 		reaper.ShowMessageBox("Failed to disable TCP Ctrl+Mousewheel zoom.", "Error", 0)
 		return

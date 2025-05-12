@@ -5,7 +5,7 @@ local ru = require("reautils")
 
 local vzoom = {}
 
-vzoom.DEFAULT_MAX_VZOOM = 40                   -- Maximum zoom level
+vzoom.DEFAULT_MAX_VZOOM = 40 -- Maximum zoom level
 vzoom.VERTICAL_ZOOM_MODES = {
 	TRACK_AT_VIEW_CENTER = 0,
 	TOP_OF_VIEW = 1,
@@ -244,9 +244,9 @@ function vzoom.zoom_proportionally(change_zoom)
 			then
 				-- Check if element was inside TCP or was at top of it before zoom
 				if
-					(vzoom_el_y >= 0 and -- Element is not above visible part of TCP
-					vzoom_el_y + vzoom_el_h <= arrange_view_height) or -- Element is not below visible part of TCP
-					vzoom_el_y == 0 -- Element touches the top of the visible part of TCP
+					(vzoom_el_y >= 0 and                 -- Element is not above visible part of TCP
+						vzoom_el_y + vzoom_el_h <= arrange_view_height) or -- Element is not below visible part of TCP
+					vzoom_el_y == 0                      -- Element touches the top of the visible part of TCP
 				then
 					-- Calculate min and max scroll to fit element in window
 					local scroll_max_for_track = new_scroll_y + new_vzoom_el_y
@@ -267,27 +267,56 @@ function vzoom.zoom_proportionally(change_zoom)
 	return table.unpack(retvals)
 end
 
+local HEIGHT_LOCK_INDICATOR = {
+	BORDER = reaper.JS_GDI_CreatePen(0, reaper.JS_GDI_GetSysColor("3DSHADOW")),
+	FILL = reaper.JS_GDI_CreateFillBrush(reaper.JS_GDI_GetSysColor("3DFACE")),
+	FONT = reaper.JS_GDI_CreateFont(10, 1000, 0, false, false, false, nil),
+	TEXT_COLOR_LOCKED = reaper.JS_GDI_GetSysColor("3DDKSHADOW"),
+	TEXT_COLOR_UNLOCKED = reaper.JS_GDI_GetSysColor("3DHILIGHT"),
+	TEXT_LOCKED = "🔒",
+	TEXT_UNLOCKED = "🔓",
+	X = 0,
+	Y = 10,
+	W = 16,
+	H = 16,
+	CORNER_ROUNDING = 4
+}
 function vzoom.set_track_height_lock_indicator(track, lock_state)
-	local success, track_name = reaper.GetSetMediaTrackInfo_String(track, "P_NAME", "", false)
-	if not success then
-		return
-	end
-	if lock_state == 0 then
-		if track_name:find("^🔒 ") then
-			track_name = track_name:gsub("^🔒 ", "")
-		end
-		if not track_name:find("^🔓 ") then
-			track_name = "🔓 " .. track_name
-		end
-	else
-		if track_name:find("^🔓 ") then
-			track_name = track_name:gsub("^🔓 ", "")
-		end
-		if not track_name:find("^🔒 ") then
-			track_name = "🔒 " .. track_name
-		end
-	end
-	reaper.GetSetMediaTrackInfo_String(track, "P_NAME", track_name, true)
+	-- TODO: rimpiazza con un bordo sul lato della traccia, che è più semplice e meno invasivo
+	local tcp_hwnd = ru.tcp.get_hwnd()
+	local device_context = reaper.JS_GDI_GetWindowDC(tcp_hwnd)
+
+	local track_y = reaper.GetMediaTrackInfo_Value(track, "I_TCPY")
+	local track_h = reaper.GetMediaTrackInfo_Value(track, "I_TCPH")
+	if HEIGHT_LOCK_INDICATOR.Y + HEIGHT_LOCK_INDICATOR.H > track_h then return end
+	-- Background
+	reaper.JS_GDI_SelectObject(device_context, HEIGHT_LOCK_INDICATOR.BORDER)
+	reaper.JS_GDI_SelectObject(device_context, HEIGHT_LOCK_INDICATOR.FILL)
+	reaper.JS_GDI_FillRoundRect(device_context,
+		HEIGHT_LOCK_INDICATOR.X,
+		HEIGHT_LOCK_INDICATOR.Y + track_y,
+		HEIGHT_LOCK_INDICATOR.X + HEIGHT_LOCK_INDICATOR.W,
+		HEIGHT_LOCK_INDICATOR.Y + HEIGHT_LOCK_INDICATOR.H + track_y,
+		HEIGHT_LOCK_INDICATOR.CORNER_ROUNDING,
+		HEIGHT_LOCK_INDICATOR.CORNER_ROUNDING)
+	-- Icon
+	local text = lock_state == 1 and
+		HEIGHT_LOCK_INDICATOR.TEXT_LOCKED or
+		HEIGHT_LOCK_INDICATOR.TEXT_UNLOCKED
+	local text_color = lock_state == 1 and
+		HEIGHT_LOCK_INDICATOR.TEXT_COLOR_LOCKED or
+		HEIGHT_LOCK_INDICATOR.TEXT_COLOR_UNLOCKED
+	reaper.JS_GDI_SetTextBkMode(device_context, 0)
+	reaper.JS_GDI_SelectObject(device_context, HEIGHT_LOCK_INDICATOR.FONT)
+	reaper.JS_GDI_SetTextColor(device_context, text_color)
+	reaper.JS_GDI_DrawText(device_context, text, string.len(text),
+		HEIGHT_LOCK_INDICATOR.X,
+		HEIGHT_LOCK_INDICATOR.Y + track_y,
+		HEIGHT_LOCK_INDICATOR.X + HEIGHT_LOCK_INDICATOR.W,
+		HEIGHT_LOCK_INDICATOR.Y + HEIGHT_LOCK_INDICATOR.H + track_y,
+		"VCENTER HCENTER SINGLELINE")
+
+	reaper.JS_GDI_ReleaseDC(tcp_hwnd, device_context)
 end
 
 function vzoom.update_track_height_lock_indicators()

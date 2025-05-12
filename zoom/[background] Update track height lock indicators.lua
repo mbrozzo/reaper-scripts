@@ -7,7 +7,7 @@ local function main()
 	background.loop(
 		vzoom.update_track_height_lock_indicators,
 		function ()
-			reaper.ShowConsoleMsg("The script to update track height lock indicators exited.")
+			reaper.ShowConsoleMsg("The script to update track height lock indicators exited.\n")
 		end,
 		true
 	)

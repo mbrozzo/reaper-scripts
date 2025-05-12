@@ -39,6 +39,13 @@ function ru.track.get_all(include_master)
 	return tracks
 end
 
+function ru.track.is_visible(track)
+    if reaper.GetMediaTrackInfo_Value(track, "IP_TRACKNUMBER") == -1 then
+        return reaper.GetToggleCommandStateEx(0, ru.action.ids.TOGGLE_MASTER_TRACK_VISIBLE) == 1
+    end
+    return reaper.GetMediaTrackInfo_Value(track, "B_SHOWINTCP") == 1
+end
+
 function ru.track.get_all_compact_states(ordered_tracks_no_master)
 	ordered_tracks_no_master = ordered_tracks_no_master or ru.track.get_all(false)
 	local track_compact_states = {}
@@ -127,7 +134,17 @@ function ru.tcp.get_hwnd(main_window_hwnd)
 	return reaper.JS_Window_FindEx(main_window_hwnd, nil, "REAPERTCPDisplay", "")
 end
 
-ru.tcp.get_height = ru.arrange_view.get_height
+function ru.tcp.get_width(tcp_hwnd)
+	tcp_hwnd = tcp_hwnd or ru.tcp.get_hwnd()
+	local _, left, _, right, _ = reaper.JS_Window_GetClientRect(tcp_hwnd)
+	return right - left
+end
+
+function ru.tcp.get_height(tcp_hwnd)
+	tcp_hwnd = tcp_hwnd or ru.tcp.get_hwnd()
+	local _, _, top, _, bottom = reaper.JS_Window_GetClientRect(tcp_hwnd)
+	return bottom - top
+end
 
 -- Returns:
 -- 1. type (track/envelope/space)
@@ -172,14 +189,7 @@ function ru.tcp.get_element_at_y(ordered_tracks, tcp_y)
 				end
 			end
 		end
-		-- check track
-		local is_visible
-		if i > 1 then
-			is_visible = reaper.GetMediaTrackInfo_Value(track, "B_SHOWINTCP")
-		else
-			is_visible = reaper.GetToggleCommandStateEx(0, ru.action.ids.TOGGLE_MASTER_TRACK_VISIBLE)
-		end
-		if is_visible and track_y <= tcp_y then
+		if ru.track.is_visible(track) and track_y <= tcp_y then
 			-- found track, return
 			return
 				ru.tcp.ELEMENT_TYPES.TRACK,
@@ -188,6 +198,14 @@ function ru.tcp.get_element_at_y(ordered_tracks, tcp_y)
 				reaper.GetMediaTrackInfo_Value(ordered_tracks[i], "I_TCPH")
 		end
 	end
+end
+
+-- Drawing
+ru.drawing = {}
+
+function ru.drawing.theme_color_to_rgb(color)
+    local r, g, b = reaper.ColorFromNative(color)
+    return (r << 16) | (g << 8) | b
 end
 
 return ru

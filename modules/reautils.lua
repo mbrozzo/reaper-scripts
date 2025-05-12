@@ -107,8 +107,15 @@ function ru.arrange_view.get_hwnd(main_window_hwnd)
 	return reaper.JS_Window_FindEx(main_window_hwnd, nil, "REAPERTrackListWindow", "trackview")
 end
 
+function ru.arrange_view.get_height(arrange_view_hwnd)
+	arrange_view_hwnd = arrange_view_hwnd or ru.arrange_view.get_hwnd()
+	local _, _, top, _, bottom = reaper.JS_Window_GetClientRect(arrange_view_hwnd)
+	return bottom - top
+end
+
 -- TCP
 ru.tcp = {}
+ru.tcp.DEFAULT_EMPTY_SPACE_BELOW_TRACKS = 60 -- pixels
 ru.tcp.ELEMENT_TYPES = {
 	TRACK = 1,
 	ENVELOPE = 2,
@@ -119,6 +126,8 @@ function ru.tcp.get_hwnd(main_window_hwnd)
 	main_window_hwnd = main_window_hwnd or reaper.GetMainHwnd()
 	return reaper.JS_Window_FindEx(main_window_hwnd, nil, "REAPERTCPDisplay", "")
 end
+
+ru.tcp.get_height = ru.arrange_view.get_height
 
 -- Returns:
 -- 1. type (track/envelope/space)

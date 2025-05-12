@@ -6,11 +6,6 @@ local ru = require("reautils")
 local vzoom = {}
 
 vzoom.DEFAULT_MAX_VZOOM = 40                   -- Maximum zoom level
-vzoom.MINIMIZE_TOGGLE_COMMAND_ID = 40110       -- Command ID for toggling track height to minimum
-vzoom.MAXIMIZE_TOGGLE_COMMAND_ID = 40113       -- Command ID for toggling track height to maximum
-vzoom.ZOOM_IN_COMMAND_ID = 40111               -- Command ID for zooming in
-vzoom.ZOOM_OUT_COMMAND_ID = 40112              -- Command ID for zooming out
-vzoom.DEFAULT_VERTICAL_SPACE_AFTER_TRACKS = 60 -- pixels
 vzoom.VERTICAL_ZOOM_MODES = {
 	TRACK_AT_VIEW_CENTER = 0,
 	TOP_OF_VIEW = 1,
@@ -18,24 +13,9 @@ vzoom.VERTICAL_ZOOM_MODES = {
 	TRACK_UNDER_MOUSE = 3,
 }
 
-function vzoom.get_current_min_track_height()
-	local _, collapsed, _, _ = reaper.NF_GetThemeDefaultTCPHeights()
-	return collapsed
-end
-
-function vzoom.get_arrange_view_height(arrange_view_hwnd)
-	arrange_view_hwnd = arrange_view_hwnd or ru.arrange_view.get_hwnd()
-	local _, _, top, _, bottom = reaper.JS_Window_GetClientRect(arrange_view_hwnd)
-	return bottom - top
-end
-
--- Aliases for get_arrange_view_height
-vzoom.get_tcp_height = vzoom.get_arrange_view_height
-vzoom.get_current_max_track_height = vzoom.get_arrange_view_height
-
 function vzoom.estimate_default_track_height(vzoom3)
 	local _, collapsed, small, recarm = reaper.NF_GetThemeDefaultTCPHeights()
-	local h_max = vzoom.get_current_max_track_height()
+	local h_max = ru.arrange_view.get_height()
 	local h_30 = lu.math.round(recarm + (h_max - recarm) * 0.4636)
 	if vzoom3 < 2 then
 		return lu.math.round(collapsed + (small - collapsed) / 2 * vzoom3)
@@ -54,7 +34,7 @@ end
 
 function vzoom.estimate_vzoom3(default_track_height)
 	local _, collapsed, small, recarm = reaper.NF_GetThemeDefaultTCPHeights()
-	local h_max = vzoom.get_current_max_track_height()
+	local h_max = ru.arrange_view.get_height()
 	local h_30 = lu.math.round(recarm + (h_max - recarm) * 0.4636)
 	if default_track_height < small then
 		return 2 / (small - collapsed) * (default_track_height - collapsed)
@@ -72,7 +52,7 @@ function vzoom.estimate_vzoom3(default_track_height)
 end
 
 function vzoom.get_max_vzoom()
-	return vzoom.estimate_vzoom3(vzoom.get_current_max_track_height() *
+	return vzoom.estimate_vzoom3(ru.arrange_view.get_height() *
 		reaper.SNM_GetDoubleConfigVar("maxvzoom", 1))
 end
 
@@ -120,7 +100,7 @@ end
 function vzoom.get_vzoom_center_y(vzoom_mode, arrange_view_hwnd)
 	vzoom_mode = vzoom_mode or reaper.SNM_GetIntConfigVar("vzoommode", 0)
 	arrange_view_hwnd = arrange_view_hwnd or ru.arrange_view.get_hwnd()
-	local arrange_view_height = vzoom.get_arrange_view_height(arrange_view_hwnd)
+	local arrange_view_height = ru.arrange_view.get_height(arrange_view_hwnd)
 	local vzoom_y = arrange_view_height / 2 -- Default to center of arrange view
 	if vzoom_mode == vzoom.VERTICAL_ZOOM_MODES.TOP_OF_VIEW then
 		vzoom_y = 0
@@ -163,7 +143,7 @@ function vzoom.zoom_proportionally(change_zoom)
 	local arrange_view_hwnd = ru.arrange_view.get_hwnd()
 	local vzoom_y = vzoom.get_vzoom_center_y(vzoom_mode, arrange_view_hwnd)
 	local vzoom_el_type, vzoom_el, vzoom_el_y, vzoom_el_h = ru.tcp.get_element_at_y(tracks, vzoom_y)
-	local arrange_view_height = vzoom.get_arrange_view_height(arrange_view_hwnd)
+	local arrange_view_height = ru.arrange_view.get_height(arrange_view_hwnd)
 
 	-- Estimate track height before zooming
 	local old_h = vzoom.estimate_default_track_height(reaper.SNM_GetDoubleConfigVar("vzoom3", -1))
@@ -237,7 +217,7 @@ function vzoom.zoom_proportionally(change_zoom)
 		local is_new_scroll_info_success, _, page_size, scroll_min, scroll_max, _ =
 			reaper.JS_Window_GetScrollInfo(arrange_view_hwnd, "SB_VERT")
 		if is_new_scroll_info_success and new_vzoom_el_y ~= nil and new_vzoom_el_h ~= nil and new_scroll_y ~= nil then
-			-- vzoom_y = vzoom.get_arrange_view_height(arrange_view_hwnd) / 2
+			-- vzoom_y = ru.arrange_view.get_height(arrange_view_hwnd) / 2
 			local final_scroll_y
 			if not vzoom_el_h then
 				final_scroll_y = scroll_max - page_size

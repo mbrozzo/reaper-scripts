@@ -44,12 +44,16 @@ end
 local function main()
 	handle_tcp_ctrl_mousewheel(function(_, _, _, rotate, _, _)
 		vzoom.zoom_proportionally(function()
+			local vzoom_limit_func, vzoom_limit
 			if rotate > 0 then
-				reaper.SNM_SetDoubleConfigVar("vzoom3",
-				math.min(reaper.SNM_GetDoubleConfigVar("vzoom3", -1) + 1, vzoom.get_max_vzoom()))
+				vzoom_limit_func = math.min
+				vzoom_limit = vzoom.get_max_vzoom()
 			else
-				reaper.SNM_SetDoubleConfigVar("vzoom3", math.max(reaper.SNM_GetDoubleConfigVar("vzoom3", -1) - 1, 0))
+				vzoom_limit_func = math.max
+				vzoom_limit = 0
 			end
+			local new_vzoom = reaper.SNM_GetDoubleConfigVar("vzoom3", -1) + rotate / 120
+			reaper.SNM_SetDoubleConfigVar("vzoom3", vzoom_limit_func(new_vzoom, vzoom_limit))
 		end)
 	end)
 end
